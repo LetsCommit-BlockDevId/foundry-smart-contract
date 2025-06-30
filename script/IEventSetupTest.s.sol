@@ -20,6 +20,9 @@ contract IEventSetupTest is Script {
         c = new LetsCommit();
 
 
+        /// @dev lines below are commented because it causes an error
+        /// when running the script, and it seems like only for testing purposes.
+        /*
         for (uint i = 0; i < 20; i++) {
 
             c.createEvent();
@@ -27,6 +30,7 @@ contract IEventSetupTest is Script {
             c.enrollAndAttend();
 
         }
+        */
 
         vm.stopBroadcast();
 
