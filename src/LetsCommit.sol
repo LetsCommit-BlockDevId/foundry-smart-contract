@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import {IEventIndexer} from "./IEventIndexer.sol";
+import {IEventIndexer} from "./interfaces/IEventIndexer.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
  * @title LetsCommit
@@ -11,6 +12,12 @@ contract LetsCommit is IEventIndexer {
     // ============================================================================
     // STATE VARIABLES
     // ============================================================================
+
+    /// @dev Protocol admin, we can use ownable pattern in the future
+    address public protocolAdmin;
+
+    /// @dev Maximum number of sessions allowed per event
+    uint8 public maxSessionsPerEvent = 12;
 
     /// @dev Counter for event IDs
     uint256 public eventId;
@@ -22,44 +29,38 @@ contract LetsCommit is IEventIndexer {
     uint256 public eventIdEnroll;
 
     // ============================================================================
-    // STORAGE MAPPINGS (TODO: Implement proper storage)
+    // STORAGE MAPPINGS
     // ============================================================================
 
-    // TODO: Add storage for events
-    // mapping(uint256 => Event) public events;
+    /// @dev Storage for events
+    mapping(uint256 => Event) public events;
+    
+    /// @dev Storage for sessions: eventId => sessionIndex => Session
+    mapping(uint256 => mapping(uint8 => Session)) public sessions;
     
     // TODO: Add storage for participants
     // mapping(uint256 => mapping(address => Participant)) public participants;
-    
-    // TODO: Add storage for sessions
-    // mapping(uint256 => mapping(uint8 => Session)) public sessions;
 
     // ============================================================================
-    // STRUCTS (TODO: Define data structures)
+    // STRUCTS
     // ============================================================================
 
-    // TODO: Define Event struct
-    // struct Event {
-    //     string title;
-    //     string description;
-    //     string imageUri;
-    //     uint256 priceAmount;
-    //     uint256 commitmentAmount;
-    //     uint8 totalSession;
-    //     uint256 startSaleDate;
-    //     uint256 endSaleDate;
-    //     address organizer;
-    //     string[5] tag;
-    //     bool exists;
-    // }
+    /// @dev Event data structure for on-chain storage
+    struct Event {
+        address organizer;
+        uint256 priceAmount;
+        uint256 commitmentAmount;
+        uint8 totalSession;
+        uint256 startSaleDate;
+        uint256 endSaleDate;
+        uint256 lastSessionEndTime; // End time of the last session
+    }
 
-    // TODO: Define Session struct
-    // struct Session {
-    //     string title;
-    //     uint256 startSessionTime;
-    //     uint256 endSessionTime;
-    //     bool exists;
-    // }
+    /// @dev Session data structure for on-chain storage
+    struct Session {
+        uint256 startSessionTime;
+        uint256 endSessionTime;
+    }
 
     // TODO: Define Participant struct
     // struct Participant {
@@ -73,18 +74,55 @@ contract LetsCommit is IEventIndexer {
     // ============================================================================
 
     // ============================================================================
-    // MODIFIERS (TODO: Implement access control and validation)
+    // CUSTOM ERRORS
     // ============================================================================
+
+    /// @dev Error thrown when start sale date is in the past
+    error StartSaleDateInPast();
+
+    /// @dev Error thrown when end sale date is in the past
+    error EndSaleDateInPast();
+
+    /// @dev Error thrown when start sale date is after end sale date
+    error InvalidSaleDateRange();
+
+    /// @dev Error thrown when total sessions is zero
+    error TotalSessionsZero();
+
+    /// @dev Error thrown when total sessions exceeds maximum allowed
+    error TotalSessionsExceedsMax(uint8 requested, uint8 max);
+
+    /// @dev Error thrown when caller is not protocol admin
+    error NotProtocolAdmin();
+
+    /// @dev Error thrown when event does not exist
+    error EventDoesNotExist(uint256 eventId);
+
+    /// @dev Error thrown when new max sessions is zero
+    error MaxSessionsZero();
+
+    /// @dev Error thrown when last session end time is not after end sale date
+    error LastSessionMustBeAfterSaleEnd();
+
+    // ============================================================================
+    // MODIFIERS
+    // ============================================================================
+
+    /// @dev Modifier to restrict access to protocol admin only
+    modifier onlyProtocolAdmin() {
+        if (msg.sender != protocolAdmin) revert NotProtocolAdmin();
+        _;
+    }
+
+    /// @dev Modifier to check if event exists
+    modifier eventExists(uint256 _eventId) {
+        if (_eventId == 0 || _eventId > eventId) revert EventDoesNotExist(_eventId);
+        _;
+    }
 
     // TODO: Add modifiers for access control
     // modifier onlyOrganizer(uint256 _eventId) {
     //     require(events[_eventId].organizer == msg.sender, "Not the organizer");
-    //     _;
-    // }
-
-    // TODO: Add modifiers for event validation
-    // modifier eventExists(uint256 _eventId) {
-    //     require(events[_eventId].exists, "Event does not exist");
     //     _;
     // }
 
@@ -93,7 +131,7 @@ contract LetsCommit is IEventIndexer {
     // ============================================================================
 
     constructor() {
-        // TODO: Initialize contract state if needed
+        protocolAdmin = msg.sender;
     }
 
     // ============================================================================
@@ -102,33 +140,101 @@ contract LetsCommit is IEventIndexer {
 
     /**
      * @dev Creates a new event with sessions
+     * @param title The title of the event
+     * @param description The description of the event
+     * @param imageUri The image URI for the event
+     * @param priceAmount The price amount for participating in the event
+     * @param commitmentAmount The commitment amount participants must stake
+     * @param startSaleDate The timestamp when sale starts
+     * @param endSaleDate The timestamp when sale ends
+     * @param tags Array of tags for the event
+     * @param _sessions Array of session parameters
      * @return success True if event creation was successful
-     * TODO: Add proper parameters and validation
      */
-    function createEvent() external returns (bool success) {
-        // TODO: Implement proper parameter handling
-        string[5] memory tags = ["satu", "dua", "", "", ""];
-        uint8 totalSession = 12;
+    function createEvent(
+        string calldata title,
+        string calldata description,
+        string calldata imageUri,
+        uint256 priceAmount,
+        uint256 commitmentAmount,
+        uint256 startSaleDate,
+        uint256 endSaleDate,
+        string[5] calldata tags,
+        Session[] calldata _sessions
+    ) external returns (bool success) {
+        // Validate dates
+        if (startSaleDate < block.timestamp) revert StartSaleDateInPast();
+        if (endSaleDate < block.timestamp) revert EndSaleDateInPast();
+        if (startSaleDate > endSaleDate) revert InvalidSaleDateRange();
+        
+        // Validate session count
+        uint8 totalSession = uint8(_sessions.length);
+        if (totalSession == 0) revert TotalSessionsZero();
+        if (totalSession > maxSessionsPerEvent) revert TotalSessionsExceedsMax(totalSession, maxSessionsPerEvent);
 
-        emit CreateEvent({
-            eventId: ++eventId,
-            title: "title",
-            description: "description",
-            imageUri: "imageUri",
-            priceAmount: 10_000,
-            commitmentAmount: 10_000,
+        // Find the last session end time (assuming sessions are ordered)
+        uint256 lastSessionEndTime = _sessions[totalSession - 1].endSessionTime;
+        
+        // Validate that last session ends after sale period
+        if (lastSessionEndTime <= endSaleDate) revert LastSessionMustBeAfterSaleEnd();
+
+        // Increment event ID and store event data
+        uint256 newEventId = ++eventId;
+        
+        // Store important data on-chain
+        events[newEventId] = Event({
+            organizer: msg.sender,
+            priceAmount: priceAmount,
+            commitmentAmount: commitmentAmount,
             totalSession: totalSession,
-            startSaleDate: block.timestamp,
-            endSaleDate: block.timestamp + 7 days,
-            organizer: address(0x0), // TODO: Use msg.sender
+            startSaleDate: startSaleDate,
+            endSaleDate: endSaleDate,
+            lastSessionEndTime: lastSessionEndTime
+        });
+
+        // Emit event with all data (including metadata)
+        emit CreateEvent({
+            eventId: newEventId,
+            title: title,
+            description: description,
+            imageUri: imageUri,
+            priceAmount: priceAmount,
+            commitmentAmount: commitmentAmount,
+            totalSession: totalSession,
+            startSaleDate: startSaleDate,
+            endSaleDate: endSaleDate,
+            organizer: msg.sender,
             tag: tags
         });
 
+        // Create sessions and store them on-chain (single loop - most efficient)
         for (uint8 i = 0; i < totalSession; i++) {
-            _emitCreateSession(i);
+            // Store session data directly in storage
+            sessions[newEventId][i] = Session({
+                startSessionTime: _sessions[i].startSessionTime,
+                endSessionTime: _sessions[i].endSessionTime
+            });
+
+            // Emit session creation event
+            emit CreateSession({
+                eventId: newEventId,
+                session: i,
+                title: string.concat("Session ", Strings.toString(i + 1)),
+                startSessionTime: _sessions[i].startSessionTime,
+                endSessionTime: _sessions[i].endSessionTime
+            });
         }
 
         return true;
+    }
+
+    /**
+     * @dev Sets the maximum number of sessions per event (admin only)
+     * @param newMaxSessions The new maximum number of sessions
+     */
+    function setMaxSessionsPerEvent(uint8 newMaxSessions) external onlyProtocolAdmin {
+        if (newMaxSessions == 0) revert MaxSessionsZero();
+        maxSessionsPerEvent = newMaxSessions;
     }
 
     /**
@@ -271,39 +377,41 @@ contract LetsCommit is IEventIndexer {
     // INTERNAL FUNCTIONS
     // ============================================================================
 
-    /**
-     * @dev Internal function to emit session creation event
-     * @param sessionIndex The index of the session being created
-     * @return success True if session creation was successful
-     */
-    function _emitCreateSession(uint8 sessionIndex) internal returns (bool success) {
-        emit CreateSession({
-            eventId: eventId,
-            session: sessionIndex,
-            title: string.concat("Session ", "1"), // TODO: Use proper session numbering
-            startSessionTime: block.timestamp + (1 days * sessionIndex),
-            endSessionTime: block.timestamp + (1 days * sessionIndex) + 1 hours
-        });
+    // TODO: Add internal helper functions if needed
 
-        return true;
+    // ============================================================================
+    // VIEW FUNCTIONS
+    // ============================================================================
+
+    /**
+     * @dev Gets event data
+     * @param _eventId The ID of the event
+     * @return Event data stored on-chain
+     */
+    function getEvent(uint256 _eventId) external view eventExists(_eventId) returns (Event memory) {
+        return events[_eventId];
     }
 
-    // ============================================================================
-    // VIEW FUNCTIONS (TODO: Implement getters)
-    // ============================================================================
+    /**
+     * @dev Gets session data
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return Session data stored on-chain
+     */
+    function getSession(uint256 _eventId, uint8 _sessionIndex) external view eventExists(_eventId) returns (Session memory) {
+        return sessions[_eventId][_sessionIndex];
+    }
 
-    // TODO: Add view functions to read contract state
-    // function getEvent(uint256 _eventId) external view returns (Event memory) {}
+    // TODO: Add more view functions to read contract state
     // function getParticipant(uint256 _eventId, address _participant) external view returns (Participant memory) {}
-    // function getSession(uint256 _eventId, uint8 _session) external view returns (Session memory) {}
     // function isParticipantEnrolled(uint256 _eventId, address _participant) external view returns (bool) {}
     // function hasAttended(uint256 _eventId, uint8 _session, address _participant) external view returns (bool) {}
 
     // ============================================================================
-    // PRIVATE FUNCTIONS (TODO: Implement helper functions)
+    // PRIVATE FUNCTIONS
     // ============================================================================
 
-    // TODO: Add private helper functions for complex logic
+    // TODO: Add more private helper functions for complex logic
     // function _validateEventParameters(...) private pure returns (bool) {}
     // function _calculateClaimAmount(...) private view returns (uint256) {}
     // function _isValidAttendanceToken(...) private pure returns (bool) {}
