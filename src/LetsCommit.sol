@@ -162,7 +162,7 @@ contract LetsCommit is IEventIndexer {
         string[5] calldata tags,
         Session[] calldata _sessions
     ) external returns (bool success) {
-        // Validate dates
+        // CHECKS: Validate all input parameters
         if (startSaleDate < block.timestamp) revert StartSaleDateInPast();
         if (endSaleDate < block.timestamp) revert EndSaleDateInPast();
         if (startSaleDate > endSaleDate) revert InvalidSaleDateRange();
@@ -177,55 +177,19 @@ contract LetsCommit is IEventIndexer {
         
         // Validate that last session ends after sale period
         if (lastSessionEndTime <= endSaleDate) revert LastSessionMustBeAfterSaleEnd();
-
-        // Increment event ID and store event data
-        uint256 newEventId = ++eventId;
         
-        // Store important data on-chain
-        events[newEventId] = Event({
-            organizer: msg.sender,
-            priceAmount: priceAmount,
-            commitmentAmount: commitmentAmount,
-            totalSession: totalSession,
-            startSaleDate: startSaleDate,
-            endSaleDate: endSaleDate,
-            lastSessionEndTime: lastSessionEndTime
-        });
-
-        // Emit event with all data (including metadata)
-        emit CreateEvent({
-            eventId: newEventId,
-            title: title,
-            description: description,
-            imageUri: imageUri,
-            priceAmount: priceAmount,
-            commitmentAmount: commitmentAmount,
-            totalSession: totalSession,
-            startSaleDate: startSaleDate,
-            endSaleDate: endSaleDate,
-            organizer: msg.sender,
-            tag: tags
-        });
-
-        // Create sessions and store them on-chain (single loop - most efficient)
-        for (uint8 i = 0; i < totalSession; i++) {
-            // Store session data directly in storage
-            sessions[newEventId][i] = Session({
-                startSessionTime: _sessions[i].startSessionTime,
-                endSessionTime: _sessions[i].endSessionTime
-            });
-
-            // Emit session creation event
-            emit CreateSession({
-                eventId: newEventId,
-                session: i,
-                title: string.concat("Session ", Strings.toString(i + 1)),
-                startSessionTime: _sessions[i].startSessionTime,
-                endSessionTime: _sessions[i].endSessionTime
-            });
-        }
-
-        return true;
+        // EFFECTS & INTERACTIONS: Create the event
+        return _createEvent(
+            title,
+            description,
+            imageUri,
+            priceAmount,
+            commitmentAmount,
+            startSaleDate,
+            endSaleDate,
+            tags,
+            _sessions
+        );
     }
 
     /**
@@ -376,6 +340,85 @@ contract LetsCommit is IEventIndexer {
     // ============================================================================
     // INTERNAL FUNCTIONS
     // ============================================================================
+
+    /**
+     * @dev Internal function to create event (EFFECTS & INTERACTIONS phase of CEI pattern)
+     * @param title The title of the event
+     * @param description The description of the event
+     * @param imageUri The image URI for the event
+     * @param priceAmount The price amount for participating in the event
+     * @param commitmentAmount The commitment amount participants must stake
+     * @param startSaleDate The timestamp when sale starts
+     * @param endSaleDate The timestamp when sale ends
+     * @param tags Array of tags for the event
+     * @param _sessions Array of session parameters
+     * @return success True if event creation was successful
+     */
+    function _createEvent(
+        string calldata title,
+        string calldata description,
+        string calldata imageUri,
+        uint256 priceAmount,
+        uint256 commitmentAmount,
+        uint256 startSaleDate,
+        uint256 endSaleDate,
+        string[5] calldata tags,
+        Session[] calldata _sessions
+    ) internal returns (bool success) {
+        // EFFECTS: Update contract state
+        uint8 totalSession = uint8(_sessions.length);
+        uint256 lastSessionEndTime = _sessions[totalSession - 1].endSessionTime;
+        
+        // Increment event ID and store event data
+        uint256 newEventId = ++eventId;
+        
+        // Store important data on-chain
+        events[newEventId] = Event({
+            organizer: msg.sender,
+            priceAmount: priceAmount,
+            commitmentAmount: commitmentAmount,
+            totalSession: totalSession,
+            startSaleDate: startSaleDate,
+            endSaleDate: endSaleDate,
+            lastSessionEndTime: lastSessionEndTime
+        });
+
+        // Store sessions on-chain
+        for (uint8 i = 0; i < totalSession; i++) {
+            sessions[newEventId][i] = Session({
+                startSessionTime: _sessions[i].startSessionTime,
+                endSessionTime: _sessions[i].endSessionTime
+            });
+        }
+
+        // INTERACTIONS: Emit events
+        emit CreateEvent({
+            eventId: newEventId,
+            title: title,
+            description: description,
+            imageUri: imageUri,
+            priceAmount: priceAmount,
+            commitmentAmount: commitmentAmount,
+            totalSession: totalSession,
+            startSaleDate: startSaleDate,
+            endSaleDate: endSaleDate,
+            organizer: msg.sender,
+            tag: tags
+        });
+
+        // Emit session creation events
+        for (uint8 i = 0; i < totalSession; i++) {
+            emit CreateSession({
+                eventId: newEventId,
+                session: i,
+                title: string.concat("Session ", Strings.toString(i + 1)),
+                startSessionTime: _sessions[i].startSessionTime,
+                endSessionTime: _sessions[i].endSessionTime
+            });
+        }
+
+        return true;
+    }
 
     // TODO: Add internal helper functions if needed
 
