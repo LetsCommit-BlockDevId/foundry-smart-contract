@@ -296,7 +296,7 @@ contract LetsCommitViewsTest is Test {
     }
 
     function test_ViewFunctionsNonExistentEventRevert() public {
-        uint256 eventId = createTestEvent();
+        createTestEvent();
         
         // All view functions should revert for non-existent events
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
