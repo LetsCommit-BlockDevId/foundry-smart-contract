@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import {Test, console} from "forge-std/Test.sol";
 import {LetsCommit} from "../src/LetsCommit.sol";
 import {IEventIndexer} from "../src/interfaces/IEventIndexer.sol";
+import {mIDRX} from "../src/mIDRX.sol"; // Import mIDRX token contract if needed
 
 /**
  * @title LetsCommitTest
@@ -15,6 +16,7 @@ contract LetsCommitTest is Test {
     // ============================================================================
 
     LetsCommit public letsCommit;
+    mIDRX public mIDRXToken; // mIDRX token contract instance
     
     address public deployer = makeAddr("deployer");
     address public alice = makeAddr("alice");
@@ -35,7 +37,8 @@ contract LetsCommitTest is Test {
 
     function setUp() public {
         vm.startPrank(deployer);
-        letsCommit = new LetsCommit();
+        mIDRXToken = new mIDRX(); // Deploy mIDRX token contract
+        letsCommit = new LetsCommit(address(mIDRXToken));
         vm.stopPrank();
     }
 
@@ -643,5 +646,564 @@ contract LetsCommitTest is Test {
         LetsCommit.Session memory session1 = letsCommit.getSession(1, 1);
         assertEq(session1.startSessionTime, sessions[1].startSessionTime);
         assertEq(session1.endSessionTime, sessions[1].endSessionTime);
+    }
+
+    // ============================================================================
+    // ENROLL EVENT TESTS
+    // ============================================================================
+
+    function test_EnrollEventSuccess() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 commitmentFeeWithDecimals = COMMITMENT_AMOUNT * (10 ** tokenDecimals);
+        uint256 eventFeeWithDecimals = PRICE_AMOUNT * (10 ** tokenDecimals);
+        uint256 totalPayment = commitmentFeeWithDecimals + eventFeeWithDecimals;
+        
+        // Mint tokens to alice and approve
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Test enrollment
+        vm.expectEmit(true, true, false, true);
+        emit IEventIndexer.EnrollEvent(1, alice, totalPayment);
+        
+        vm.prank(alice);
+        bool success = letsCommit.enrollEvent(1);
+        
+        assertTrue(success);
+        assertTrue(letsCommit.isParticipantEnrolled(1, alice));
+        assertEq(letsCommit.getParticipantCommitmentFee(1, alice), commitmentFeeWithDecimals);
+        
+        // Check organizer balances
+        uint256 expectedClaimable = eventFeeWithDecimals / 2;
+        uint256 expectedVested = eventFeeWithDecimals - expectedClaimable;
+        assertEq(letsCommit.getOrganizerClaimableAmount(1, organizer), expectedClaimable);
+        assertEq(letsCommit.getOrganizerVestedAmount(1, organizer), expectedVested);
+        
+        // Check token balance transferred
+        assertEq(mIDRXToken.balanceOf(address(letsCommit)), totalPayment);
+        assertEq(mIDRXToken.balanceOf(alice), 0);
+    }
+
+    function test_RevertWhen_EnrollNonExistentEvent() public {
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999)
+        );
+        letsCommit.enrollEvent(999);
+    }
+
+    function test_RevertWhen_ParticipantAlreadyEnrolled() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        
+        // Mint tokens to alice and approve double amount
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment * 2);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment * 2);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // First enrollment - should succeed
+        vm.prank(alice);
+        letsCommit.enrollEvent(1);
+        
+        // Second enrollment - should revert
+        vm.prank(alice);
+        vm.expectRevert(LetsCommit.ParticipantAlreadyEnrolled.selector);
+        letsCommit.enrollEvent(1);
+    }
+
+    function test_RevertWhen_EnrollEventSaleNotStarted() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        
+        // Mint tokens to alice and approve
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Try to enroll before sale starts (current time is before startSaleDate)
+        vm.prank(alice);
+        vm.expectRevert(LetsCommit.EventNotInSalePeriod.selector);
+        letsCommit.enrollEvent(1);
+    }
+
+    function test_RevertWhen_EnrollEventSaleFinished() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        
+        // Mint tokens to alice and approve
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Move to after sale period ends
+        vm.warp(endSaleDate + 1 hours);
+        
+        // Try to enroll after sale ends
+        vm.prank(alice);
+        vm.expectRevert(LetsCommit.EventNotInSalePeriod.selector);
+        letsCommit.enrollEvent(1);
+    }
+
+    function test_RevertWhen_UserNotApprovedContract() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        
+        // Mint tokens to alice but DON'T approve
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Try to enroll without approval
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(LetsCommit.InsufficientAllowance.selector, totalPayment, 0)
+        );
+        letsCommit.enrollEvent(1);
+    }
+
+    function test_RevertWhen_UserApprovedInsufficientAmount() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        uint256 insufficientApproval = totalPayment - 1; // 1 wei less than required
+        
+        // Mint tokens to alice and approve insufficient amount
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), insufficientApproval);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Try to enroll with insufficient approval
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(LetsCommit.InsufficientAllowance.selector, totalPayment, insufficientApproval)
+        );
+        letsCommit.enrollEvent(1);
+    }
+
+    function test_EnrollEventWithMoreThanNeededApproval() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        uint256 excessiveApproval = totalPayment * 2; // Double the required amount
+        
+        // Mint tokens to alice and approve excessive amount
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, excessiveApproval);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), excessiveApproval);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Enrollment should succeed even with excess approval
+        vm.prank(alice);
+        bool success = letsCommit.enrollEvent(1);
+        
+        assertTrue(success);
+        assertTrue(letsCommit.isParticipantEnrolled(1, alice));
+        
+        // Check that only the required amount was transferred
+        assertEq(mIDRXToken.balanceOf(address(letsCommit)), totalPayment);
+        assertEq(mIDRXToken.balanceOf(alice), excessiveApproval - totalPayment);
+        
+        // Check remaining allowance
+        assertEq(mIDRXToken.allowance(alice, address(letsCommit)), excessiveApproval - totalPayment);
+    }
+
+    function test_RevertWhen_UserInsufficientTokenBalance() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        uint256 insufficientBalance = totalPayment - 1; // 1 wei less than required
+        
+        // Mint insufficient tokens to alice but approve full amount
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, insufficientBalance);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Try to enroll with insufficient balance - should revert with specific error
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LetsCommit.InsufficientBalance.selector,
+                totalPayment,
+                insufficientBalance
+            )
+        );
+        letsCommit.enrollEvent(1);
+    }
+
+    function test_EnrollEventWithZeroCommitmentFee() public {
+        // Create an event with zero commitment fee
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            0, // Zero commitment amount
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 eventFeeWithDecimals = PRICE_AMOUNT * (10 ** tokenDecimals);
+        uint256 totalPayment = eventFeeWithDecimals; // Only event fee, no commitment fee
+        
+        // Mint tokens to alice and approve
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Enrollment should succeed
+        vm.prank(alice);
+        bool success = letsCommit.enrollEvent(1);
+        
+        assertTrue(success);
+        assertTrue(letsCommit.isParticipantEnrolled(1, alice));
+        assertEq(letsCommit.getParticipantCommitmentFee(1, alice), 0);
+        
+        // Check organizer balances (only from event fee)
+        uint256 expectedClaimable = eventFeeWithDecimals / 2;
+        uint256 expectedVested = eventFeeWithDecimals - expectedClaimable;
+        assertEq(letsCommit.getOrganizerClaimableAmount(1, organizer), expectedClaimable);
+        assertEq(letsCommit.getOrganizerVestedAmount(1, organizer), expectedVested);
+    }
+
+    function test_EnrollEventWithZeroEventFee() public {
+        // Create an event with zero event fee
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            0, // Zero price amount
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 commitmentFeeWithDecimals = COMMITMENT_AMOUNT * (10 ** tokenDecimals);
+        uint256 totalPayment = commitmentFeeWithDecimals; // Only commitment fee, no event fee
+        
+        // Mint tokens to alice and approve
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Enrollment should succeed
+        vm.prank(alice);
+        bool success = letsCommit.enrollEvent(1);
+        
+        assertTrue(success);
+        assertTrue(letsCommit.isParticipantEnrolled(1, alice));
+        assertEq(letsCommit.getParticipantCommitmentFee(1, alice), commitmentFeeWithDecimals);
+        
+        // Check organizer balances (should be zero since no event fee)
+        assertEq(letsCommit.getOrganizerClaimableAmount(1, organizer), 0);
+        assertEq(letsCommit.getOrganizerVestedAmount(1, organizer), 0);
+    }
+
+    function test_EnrollEventWithBothFeesZero() public {
+        // Create an event with both fees as zero
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            0, // Zero price amount
+            0, // Zero commitment amount
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Don't need to mint or approve any tokens
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Enrollment should succeed even with zero payment
+        vm.prank(alice);
+        bool success = letsCommit.enrollEvent(1);
+        
+        assertTrue(success);
+        assertTrue(letsCommit.isParticipantEnrolled(1, alice));
+        assertEq(letsCommit.getParticipantCommitmentFee(1, alice), 0);
+        
+        // Check organizer balances (should be zero)
+        assertEq(letsCommit.getOrganizerClaimableAmount(1, organizer), 0);
+        assertEq(letsCommit.getOrganizerVestedAmount(1, organizer), 0);
+        
+        // Check no tokens were transferred
+        assertEq(mIDRXToken.balanceOf(address(letsCommit)), 0);
+    }
+
+    function test_EnrollEventMultipleParticipants() public {
+        // Create an event first
+        LetsCommit.Session[] memory sessions = createMultipleSessions(2);
+        uint256 startSaleDate = block.timestamp + 1 days;
+        uint256 endSaleDate = block.timestamp + 7 days;
+        
+        vm.prank(organizer);
+        letsCommit.createEvent(
+            TITLE,
+            DESCRIPTION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
+        );
+        
+        // Setup for enrollment
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
+        
+        // Mint tokens to both alice and bob
+        vm.prank(deployer);
+        mIDRXToken.mint(alice, totalPayment);
+        vm.prank(deployer);
+        mIDRXToken.mint(bob, totalPayment);
+        
+        // Approve tokens
+        vm.prank(alice);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        vm.prank(bob);
+        mIDRXToken.approve(address(letsCommit), totalPayment);
+        
+        // Move to sale period
+        vm.warp(startSaleDate + 1 hours);
+        
+        // Both should be able to enroll
+        vm.prank(alice);
+        bool successAlice = letsCommit.enrollEvent(1);
+        
+        vm.prank(bob);
+        bool successBob = letsCommit.enrollEvent(1);
+        
+        assertTrue(successAlice);
+        assertTrue(successBob);
+        assertTrue(letsCommit.isParticipantEnrolled(1, alice));
+        assertTrue(letsCommit.isParticipantEnrolled(1, bob));
+        
+        // Check organizer balances (should be doubled from two participants)
+        uint256 eventFeeWithDecimals = PRICE_AMOUNT * (10 ** tokenDecimals);
+        uint256 expectedClaimable = (eventFeeWithDecimals / 2) * 2; // From both participants
+        uint256 expectedVested = (eventFeeWithDecimals - (eventFeeWithDecimals / 2)) * 2;
+        assertEq(letsCommit.getOrganizerClaimableAmount(1, organizer), expectedClaimable);
+        assertEq(letsCommit.getOrganizerVestedAmount(1, organizer), expectedVested);
+        
+        // Check total tokens transferred
+        assertEq(mIDRXToken.balanceOf(address(letsCommit)), totalPayment * 2);
     }
 }

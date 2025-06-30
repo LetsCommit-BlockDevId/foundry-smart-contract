@@ -12,12 +12,13 @@ contract IEventSetupTest is Script {
 
 
     LetsCommit public c;
+    address public mIDRXTokenAddress = makeAddr("mIDRXTokenAddress"); // FIXME: use existing CA or deploy it
 
     function run() public {
 
         vm.startBroadcast();
 
-        c = new LetsCommit();
+        c = new LetsCommit(mIDRXTokenAddress);
 
 
         /// @dev lines below are commented because it causes an error

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {IEventIndexer} from "./interfaces/IEventIndexer.sol";
+import {mIDRX} from "./mIDRX.sol"; // Import mIDRX token contract if needed
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
@@ -15,6 +16,9 @@ contract LetsCommit is IEventIndexer {
 
     /// @dev Protocol admin, we can use ownable pattern in the future
     address public protocolAdmin;
+
+    /// @dev mIDRX ERC20 token contract address
+    mIDRX public mIDRXToken;
 
     /// @dev Maximum number of sessions allowed per event
     uint8 public maxSessionsPerEvent = 12;
@@ -38,8 +42,14 @@ contract LetsCommit is IEventIndexer {
     /// @dev Storage for sessions: eventId => sessionIndex => Session
     mapping(uint256 => mapping(uint8 => Session)) public sessions;
     
-    // TODO: Add storage for participants
-    // mapping(uint256 => mapping(address => Participant)) public participants;
+    /// @dev Storage for participants: eventId => participant address => Participant
+    mapping(uint256 => mapping(address => Participant)) public participants;
+
+    /// @dev Storage for organizer claimable amounts: organizer => eventId => claimable amount
+    mapping(address => mapping(uint256 => uint256)) public organizerClaimableAmount;
+
+    /// @dev Storage for organizer vested amounts: organizer => eventId => vested amount
+    mapping(address => mapping(uint256 => uint256)) public organizerVestedAmount;
 
     // ============================================================================
     // STRUCTS
@@ -62,12 +72,12 @@ contract LetsCommit is IEventIndexer {
         uint256 endSessionTime;
     }
 
-    // TODO: Define Participant struct
-    // struct Participant {
-    //     bool enrolled;
-    //     uint256 debitAmount;
-    //     mapping(uint8 => bool) attendance;
-    // }
+    /// @dev Participant data structure for on-chain storage
+    struct Participant {
+        uint256 enrolledDate; // Timestamp when participant enrolled in the event
+        uint256 commitmentFee; // Vested commitment fee for this participant in this event
+        mapping(uint8 => uint256) attendance; // sessionIndex => attendance timestamp (0 if not attended)
+    }
 
     // ============================================================================
     // EVENTS (Inherited from IEventIndexer)
@@ -104,6 +114,21 @@ contract LetsCommit is IEventIndexer {
     /// @dev Error thrown when last session end time is not after end sale date
     error LastSessionMustBeAfterSaleEnd();
 
+    /// @dev Error thrown when participant is already enrolled in the event
+    error ParticipantAlreadyEnrolled();
+
+    /// @dev Error thrown when event is not in sale period
+    error EventNotInSalePeriod();
+
+    /// @dev Error thrown when insufficient allowance for token transfer
+    error InsufficientAllowance(uint256 required, uint256 available);
+
+    /// @dev Error thrown when token transfer fails
+    error TokenTransferFailed();
+
+    /// @dev Error thrown when user has insufficient token balance
+    error InsufficientBalance(uint256 required, uint256 available);
+
     // ============================================================================
     // MODIFIERS
     // ============================================================================
@@ -130,8 +155,9 @@ contract LetsCommit is IEventIndexer {
     // CONSTRUCTOR
     // ============================================================================
 
-    constructor() {
+    constructor(address _mIDRXToken) {
         protocolAdmin = msg.sender;
+        mIDRXToken = mIDRX(_mIDRXToken);
     }
 
     // ============================================================================
@@ -203,18 +229,46 @@ contract LetsCommit is IEventIndexer {
 
     /**
      * @dev Enrolls a participant in an event
+     * @param _eventId The ID of the event to enroll in
      * @return success True if enrollment was successful
-     * TODO: Add proper parameters and implementation
      */
-    function enrollEvent() external returns (bool success) {
-        // TODO: Implement enrollment logic
-        emit EnrollEvent({
-            eventId: ++eventIdEnroll,
-            participant: address(0x1), // TODO: Use msg.sender
-            debitAmount: 10_000
-        });
-
-        return true;
+    function enrollEvent(uint256 _eventId) external eventExists(_eventId) returns (bool success) {
+        Event memory eventData = events[_eventId];
+        
+        // CHECKS: Validate all enrollment conditions
+        
+        // Check if participant is already enrolled
+        if (participants[_eventId][msg.sender].enrolledDate > 0) {
+            revert ParticipantAlreadyEnrolled();
+        }
+        
+        // Check if event is in sale period
+        if (block.timestamp < eventData.startSaleDate || block.timestamp > eventData.endSaleDate) {
+            revert EventNotInSalePeriod();
+        }
+        
+        // Get token decimals for proper calculation
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        
+        // Calculate total payment required (commitment fee + event fee) with proper decimals
+        uint256 commitmentFeeWithDecimals = eventData.commitmentAmount * (10 ** tokenDecimals);
+        uint256 eventFeeWithDecimals = eventData.priceAmount * (10 ** tokenDecimals);
+        uint256 totalPayment = commitmentFeeWithDecimals + eventFeeWithDecimals;
+        
+        // Check if user has approved enough tokens
+        uint256 allowance = mIDRXToken.allowance(msg.sender, address(this));
+        if (allowance < totalPayment) {
+            revert InsufficientAllowance(totalPayment, allowance);
+        }
+        
+        // Check if user has sufficient balance
+        uint256 userBalance = mIDRXToken.balanceOf(msg.sender);
+        if (userBalance < totalPayment) {
+            revert InsufficientBalance(totalPayment, userBalance);
+        }
+        
+        // All checks passed, proceed with enrollment
+        return _enrollEvent(_eventId, eventData, commitmentFeeWithDecimals, eventFeeWithDecimals, totalPayment);
     }
 
     /**
@@ -420,6 +474,52 @@ contract LetsCommit is IEventIndexer {
         return true;
     }
 
+    /**
+     * @dev Internal function to handle enrollment (EFFECTS & INTERACTIONS phase of CEI pattern)
+     * @param _eventId The ID of the event
+     * @param eventData The event data (passed to avoid re-reading from storage)
+     * @param commitmentFeeWithDecimals The commitment fee amount with token decimals
+     * @param eventFeeWithDecimals The event fee amount with token decimals
+     * @param totalPayment The total payment amount to transfer
+     * @return success True if enrollment was successful
+     */
+    function _enrollEvent(
+        uint256 _eventId,
+        Event memory eventData,
+        uint256 commitmentFeeWithDecimals,
+        uint256 eventFeeWithDecimals,
+        uint256 totalPayment
+    ) internal returns (bool success) {
+        // INTERACTIONS: Transfer tokens first (before state changes)
+        bool transferSuccess = mIDRXToken.transferFrom(msg.sender, address(this), totalPayment);
+        if (!transferSuccess) {
+            revert TokenTransferFailed();
+        }
+        
+        // EFFECTS: Update contract state after successful transfer
+        
+        // Store participant's enrollment data
+        participants[_eventId][msg.sender].enrolledDate = block.timestamp;
+        participants[_eventId][msg.sender].commitmentFee = commitmentFeeWithDecimals;
+        
+        // Calculate organizer earnings distribution
+        uint256 immediateClaimable = eventFeeWithDecimals / 2; // 50% immediately claimable
+        uint256 vestedAmount = eventFeeWithDecimals - immediateClaimable; // Remaining 50% vested
+        
+        // Update organizer's claimable and vested amounts for this event
+        organizerClaimableAmount[eventData.organizer][_eventId] += immediateClaimable;
+        organizerVestedAmount[eventData.organizer][_eventId] += vestedAmount;
+        
+        // Emit enrollment event
+        emit EnrollEvent({
+            eventId: _eventId,
+            participant: msg.sender,
+            debitAmount: totalPayment
+        });
+
+        return true;
+    }
+
     // TODO: Add internal helper functions if needed
 
     // ============================================================================
@@ -445,10 +545,56 @@ contract LetsCommit is IEventIndexer {
         return sessions[_eventId][_sessionIndex];
     }
 
-    // TODO: Add more view functions to read contract state
-    // function getParticipant(uint256 _eventId, address _participant) external view returns (Participant memory) {}
-    // function isParticipantEnrolled(uint256 _eventId, address _participant) external view returns (bool) {}
-    // function hasAttended(uint256 _eventId, uint8 _session, address _participant) external view returns (bool) {}
+    /**
+     * @dev Checks if a participant is enrolled in an event
+     * @param _eventId The ID of the event
+     * @param _participant The address of the participant
+     * @return enrolled True if participant is enrolled
+     */
+    function isParticipantEnrolled(uint256 _eventId, address _participant) external view eventExists(_eventId) returns (bool enrolled) {
+        return participants[_eventId][_participant].enrolledDate > 0;
+    }
+
+    /**
+     * @dev Gets participant's commitment fee for an event
+     * @param _eventId The ID of the event
+     * @param _participant The address of the participant
+     * @return commitmentFee The vested commitment fee amount
+     */
+    function getParticipantCommitmentFee(uint256 _eventId, address _participant) external view eventExists(_eventId) returns (uint256 commitmentFee) {
+        return participants[_eventId][_participant].commitmentFee;
+    }
+
+    /**
+     * @dev Gets organizer's claimable amount for an event
+     * @param _eventId The ID of the event
+     * @param _organizer The address of the organizer
+     * @return claimableAmount The immediately claimable amount
+     */
+    function getOrganizerClaimableAmount(uint256 _eventId, address _organizer) external view eventExists(_eventId) returns (uint256 claimableAmount) {
+        return organizerClaimableAmount[_organizer][_eventId];
+    }
+
+    /**
+     * @dev Gets organizer's vested amount for an event
+     * @param _eventId The ID of the event
+     * @param _organizer The address of the organizer
+     * @return vestedAmount The vested amount
+     */
+    function getOrganizerVestedAmount(uint256 _eventId, address _organizer) external view eventExists(_eventId) returns (uint256 vestedAmount) {
+        return organizerVestedAmount[_organizer][_eventId];
+    }
+
+    /**
+     * @dev Gets participant's attendance timestamp for a specific session
+     * @param _eventId The ID of the event
+     * @param _participant The address of the participant
+     * @param _sessionIndex The index of the session
+     * @return attendanceTimestamp The timestamp when participant attended (0 if not attended)
+     */
+    function getParticipantAttendance(uint256 _eventId, address _participant, uint8 _sessionIndex) external view eventExists(_eventId) returns (uint256 attendanceTimestamp) {
+        return participants[_eventId][_participant].attendance[_sessionIndex];
+    }
 
     // ============================================================================
     // PRIVATE FUNCTIONS
