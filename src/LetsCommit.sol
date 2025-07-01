@@ -81,7 +81,8 @@ contract LetsCommit is IEventIndexer {
     /// @dev Participant data structure for on-chain storage
     struct Participant {
         uint256 enrolledDate; // Timestamp when participant enrolled in the event
-        uint256 commitmentFee; // Vested commitment fee for this participant in this event
+        uint256 commitmentFee; // Current vested commitment fee for this participant in this event (reduces with attendance)
+        uint8 attendedSessionsCount; // Number of sessions this participant has attended
         mapping(uint8 => uint256) attendance; // sessionIndex => attendance timestamp (0 if not attended)
     }
 
@@ -161,6 +162,18 @@ contract LetsCommit is IEventIndexer {
 
     /// @dev Error thrown when organizer has no vested amount to release
     error NoVestedAmountToRelease();
+
+    /// @dev Error thrown when participant is not enrolled in the event
+    error ParticipantNotEnrolled();
+
+    /// @dev Error thrown when session code has not been set by organizer
+    error SessionCodeNotSet();
+
+    /// @dev Error thrown when provided session code doesn't match the stored code
+    error InvalidSessionCode();
+
+    /// @dev Error thrown when participant has already attended this session
+    error ParticipantAlreadyAttended();
 
     // ============================================================================
     // MODIFIERS
@@ -358,19 +371,54 @@ contract LetsCommit is IEventIndexer {
 
     /**
      * @dev Records attendance for a session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session (0-based)
+     * @param _sessionCode The session code set by the organizer
      * @return success True if attendance recording was successful
-     * TODO: Add proper parameters and implementation
      */
-    function attendSession() external returns (bool success) {
-        // TODO: Implement attendance logic
-        emit AttendEventSession({
-            eventId: eventIdEnroll,
-            session: 1,
-            participant: address(0x1), // TODO: Use msg.sender
-            attendToken: abi.encodePacked(block.timestamp, uint8(1))
-        });
+    function attendSession(uint256 _eventId, uint8 _sessionIndex, string calldata _sessionCode)
+        external
+        eventExists(_eventId)
+        returns (bool success)
+    {
+        Event memory eventData = events[_eventId];
 
-        return true;
+        // CHECKS: Validate all attendance conditions
+
+        // Check 1: Participant is enrolled in the event
+        if (participants[_eventId][msg.sender].enrolledDate == 0) {
+            revert ParticipantNotEnrolled();
+        }
+
+        // Check 2: Session index is valid
+        if (_sessionIndex >= eventData.totalSession) {
+            revert InvalidSessionIndex();
+        }
+
+        // Check 3: Session code has been set by organizer
+        string memory storedCode = sessionCodes[_eventId][_sessionIndex];
+        if (bytes(storedCode).length == 0) {
+            revert SessionCodeNotSet();
+        }
+
+        // Check 4: Provided session code matches the stored code
+        if (keccak256(bytes(_sessionCode)) != keccak256(bytes(storedCode))) {
+            revert InvalidSessionCode();
+        }
+
+        // Check 5: Currently within session time period
+        Session memory sessionData = sessions[_eventId][_sessionIndex];
+        if (block.timestamp < sessionData.startSessionTime || block.timestamp > sessionData.endSessionTime) {
+            revert NotWithinSessionTime();
+        }
+
+        // Check 6: Participant has not already attended this session
+        if (participants[_eventId][msg.sender].attendance[_sessionIndex] > 0) {
+            revert ParticipantAlreadyAttended();
+        }
+
+        // All checks passed, proceed with attendance recording
+        return _attendSession(_eventId, _sessionIndex);
     }
 
     /**
@@ -683,6 +731,86 @@ contract LetsCommit is IEventIndexer {
         return totalVestedAmount / eventData.totalSession;
     }
 
+    /**
+     * @dev Internal function to handle session attendance (EFFECTS & INTERACTIONS phase)
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return success True if attendance was recorded successfully
+     */
+    function _attendSession(uint256 _eventId, uint8 _sessionIndex)
+        internal
+        returns (bool success)
+    {
+        // Get event data to know total sessions
+        Event memory eventData = events[_eventId];
+
+        // EFFECTS: Update contract state
+
+        // Record attendance timestamp
+        participants[_eventId][msg.sender].attendance[_sessionIndex] = block.timestamp;
+        
+        // Increment attended sessions counter
+        participants[_eventId][msg.sender].attendedSessionsCount++;
+
+        // Calculate attendance reward: event commitment amount divided by total sessions
+        // This means each session attendance returns 1/totalSessions of the event's commitment amount
+        uint8 tokenDecimals = mIDRXToken.decimals();
+        uint256 originalCommitmentFee = eventData.commitmentAmount * (10 ** tokenDecimals);
+        uint256 attendanceReward = originalCommitmentFee / eventData.totalSession;
+
+        // Handle any dust/remainder from division
+        // If this is the last possible session for this participant, give them any remaining dust
+        uint8 totalSessionsAttended = participants[_eventId][msg.sender].attendedSessionsCount;
+        
+        // If this is the last session and there's remaining dust, include it
+        if (totalSessionsAttended == eventData.totalSession) {
+            uint256 remainingDust = originalCommitmentFee - (attendanceReward * (totalSessionsAttended - 1));
+            attendanceReward = remainingDust;
+        }
+
+        // Ensure we don't try to transfer more than what's available in the current commitment fee
+        uint256 currentCommitmentFee = participants[_eventId][msg.sender].commitmentFee;
+        if (attendanceReward > currentCommitmentFee) {
+            attendanceReward = currentCommitmentFee;
+        }
+
+        // Update participant's current commitment fee (reduce by reward amount)
+        participants[_eventId][msg.sender].commitmentFee -= attendanceReward;
+
+        // INTERACTIONS: Transfer reward tokens to participant
+        bool transferSuccess = mIDRXToken.transfer(msg.sender, attendanceReward);
+        if (!transferSuccess) {
+            revert TokenTransferFailed();
+        }
+
+        // Create attend token for event emission
+        bytes memory attendToken = abi.encodePacked(block.timestamp, _sessionIndex);
+
+        // Emit attendance event
+        emit AttendEventSession({
+            eventId: _eventId,
+            session: _sessionIndex,
+            participant: msg.sender,
+            attendToken: attendToken
+        });
+
+        return true;
+    }
+
+    /**
+     * @dev Internal function to count how many sessions a participant has attended for an event
+     * @param _eventId The ID of the event
+     * @param _participant The address of the participant
+     * @return count The number of sessions attended
+     */
+    function _countParticipantAttendedSessions(uint256 _eventId, address _participant)
+        internal
+        view
+        returns (uint8 count)
+    {
+        return participants[_eventId][_participant].attendedSessionsCount;
+    }
+
     // ============================================================================
     // VIEW FUNCTIONS
     // ============================================================================
@@ -727,10 +855,10 @@ contract LetsCommit is IEventIndexer {
     }
 
     /**
-     * @dev Gets participant's commitment fee for an event
+     * @dev Gets participant's current commitment fee for an event
      * @param _eventId The ID of the event
      * @param _participant The address of the participant
-     * @return commitmentFee The vested commitment fee amount
+     * @return commitmentFee The current vested commitment fee amount (reduces with attendance)
      */
     function getParticipantCommitmentFee(uint256 _eventId, address _participant)
         external
@@ -829,6 +957,37 @@ contract LetsCommit is IEventIndexer {
         returns (bool hasCode)
     {
         return bytes(sessionCodes[_eventId][_sessionIndex]).length > 0;
+    }
+
+    /**
+     * @dev Checks if a participant has attended a specific session
+     * @param _eventId The ID of the event
+     * @param _participant The address of the participant
+     * @param _sessionIndex The index of the session
+     * @return attended True if participant has attended the session
+     */
+    function hasParticipantAttendedSession(uint256 _eventId, address _participant, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (bool attended)
+    {
+        return participants[_eventId][_participant].attendance[_sessionIndex] > 0;
+    }
+
+    /**
+     * @dev Gets the total number of sessions a participant has attended for an event
+     * @param _eventId The ID of the event
+     * @param _participant The address of the participant
+     * @return count The number of sessions attended
+     */
+    function getParticipantAttendedSessionsCount(uint256 _eventId, address _participant)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint8 count)
+    {
+        return participants[_eventId][_participant].attendedSessionsCount;
     }
 
     // ============================================================================
