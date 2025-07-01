@@ -2,11 +2,22 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+viaIR = true # a temporary solution to enable IR because of stack too deep error
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "forge-std/=lib/forge-std/src/"
+]
 
 [profile.monad]
 src = "src"
 out = "out"
 libs = ["lib"]
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "forge-std/=lib/forge-std/src/"
+]
 
 metadata = true
 metadata_hash = "none"  # disable ipfs

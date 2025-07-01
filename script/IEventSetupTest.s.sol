@@ -9,17 +9,17 @@ import {StdUtils} from "../lib/forge-std/src/StdUtils.sol";
 import {LetsCommit} from "../src/LetsCommit.sol";
 
 contract IEventSetupTest is Script {
-
-
     LetsCommit public c;
+    address public mIDRXTokenAddress = makeAddr("mIDRXTokenAddress"); // FIXME: use existing CA or deploy it
 
     function run() public {
-
         vm.startBroadcast();
 
-        c = new LetsCommit();
+        c = new LetsCommit(mIDRXTokenAddress);
 
-
+        /// @dev lines below are commented because it causes an error
+        /// when running the script, and it seems like only for testing purposes.
+        /*
         for (uint i = 0; i < 20; i++) {
 
             c.createEvent();
@@ -27,8 +27,8 @@ contract IEventSetupTest is Script {
             c.enrollAndAttend();
 
         }
+        */
 
         vm.stopBroadcast();
-
     }
 }
