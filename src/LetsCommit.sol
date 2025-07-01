@@ -386,15 +386,24 @@ contract LetsCommit is IEventIndexer {
         // Calculate vested amount to release
         uint256 releasedAmount = _calculateVestedAmountPerSession(_eventId);
 
-        // Check 6: Organizer has vested amount to release
+        // Check 6: For events with commitment fees, organizer must have vested amount to release
+        // For events with 0 commitment fee, allow setting code without vested amount requirement
         uint256 vestedAmount = organizerVestedAmount[msg.sender][_eventId];
-        if (vestedAmount < releasedAmount) {
-            revert NoVestedAmountToRelease();
-        }
-
-        // Calculate if there is some dust amount left after releasing, then send the remaining dust on the last claim
-        if (vestedAmount > 0 && vestedAmount - releasedAmount < releasedAmount) {
-            releasedAmount += (vestedAmount - releasedAmount);
+        Event memory eventDataForCommitmentCheck = events[_eventId];
+        
+        if (eventDataForCommitmentCheck.commitmentAmount > 0 && eventDataForCommitmentCheck.enrolledCount > 0) {
+            // Only check vested amount if event has commitment fees
+            if (vestedAmount < releasedAmount) {
+                revert NoVestedAmountToRelease();
+            }
+            
+            // Calculate if there is some dust amount left after releasing, then send the remaining dust on the last claim
+            if (vestedAmount > 0 && vestedAmount - releasedAmount < releasedAmount) {
+                releasedAmount += (vestedAmount - releasedAmount);
+            }
+        } else {
+            // For events with 0 commitment fee, set released amount to 0
+            releasedAmount = 0;
         }
 
         // All checks passed, proceed with setting session code
@@ -780,18 +789,21 @@ contract LetsCommit is IEventIndexer {
         // Store the session code
         sessionCodes[_eventId][_sessionIndex] = _code;
 
-        // Move vested amount to claimed amount
-        organizerVestedAmount[msg.sender][_eventId] -= releasedAmount;
-        // Track the claimed amount
-        organizerClaimedAmount[msg.sender][_eventId] += releasedAmount;
+        // Only handle token transfers and storage mutations if there's an amount to release
+        if (releasedAmount > 0) {
+            // Move vested amount to claimed amount
+            organizerVestedAmount[msg.sender][_eventId] -= releasedAmount;
+            // Track the claimed amount
+            organizerClaimedAmount[msg.sender][_eventId] += releasedAmount;
 
-        // INTERACTIONS: Transfer tokens to organizer
-        bool transferSuccess = mIDRXToken.transfer(msg.sender, releasedAmount);
-        if (!transferSuccess) {
-            revert TokenTransferFailed();
+            // INTERACTIONS: Transfer tokens to organizer
+            bool transferSuccess = mIDRXToken.transfer(msg.sender, releasedAmount);
+            if (!transferSuccess) {
+                revert TokenTransferFailed();
+            }
         }
 
-        // Emit event
+        // Emit event (always emit regardless of releasedAmount)
         emit SetSessionCode({
             eventId: _eventId,
             session: _sessionIndex,

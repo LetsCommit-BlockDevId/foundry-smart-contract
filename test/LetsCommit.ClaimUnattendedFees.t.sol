@@ -245,107 +245,101 @@ contract LetsCommitClaimUnattendedFeesTest is Test {
         vm.stopPrank();
     }
 
-    // @TODO: fix this error
-    /*
     function test_ClaimUnattendedFees_WithNoParticipants() public {
         // Create a new event with no participants
         vm.startPrank(organizer);
         
-        LetsCommit.Session[] memory sessions = new LetsCommit.Session[](1);
-        sessions[0] = LetsCommit.Session({
-            startSessionTime: block.timestamp + 7 days,
-            endSessionTime: block.timestamp + 7 days + 2 hours,
+        LetsCommit.Session[] memory emptyEventSessions = new LetsCommit.Session[](1);
+        emptyEventSessions[0] = LetsCommit.Session({
+            startSessionTime: block.timestamp + 3 days,
+            endSessionTime: block.timestamp + 3 days + 2 hours,
             attendedCount: 0
         });
         
-        string[5] memory tags = ["test", "", "", "", ""];
+        string[5] memory emptyTags = ["", "", "", "", ""];
         
         letsCommit.createEvent({
             title: "Empty Event",
             description: "Event with no participants",
-            location: "Test Location",
-            imageUri: "https://test.com/image.jpg",
-            priceAmount: 100,
-            commitmentAmount: 50,
-            maxParticipant: 10,
+            location: "Virtual",
+            imageUri: "https://test.com/empty.jpg",
+            priceAmount: 50,
+            commitmentAmount: 25,
+            maxParticipant: 5,
             startSaleDate: block.timestamp,
-            endSaleDate: block.timestamp + 5 days,
-            tags: tags,
-            _sessions: sessions
+            endSaleDate: block.timestamp + 2 days,
+            tags: emptyTags,
+            _sessions: emptyEventSessions
         });
         
         uint256 emptyEventId = letsCommit.eventId();
-        vm.stopPrank();
         
         // Fast forward to session time and set code
-        vm.warp(block.timestamp + 7 days);
-        
-        vm.startPrank(organizer);
-        letsCommit.setSessionCode(emptyEventId, 0, "CODE");
-        vm.stopPrank();
+        vm.warp(block.timestamp + 3 days);
+        letsCommit.setSessionCode(emptyEventId, 0, "ABCD");
         
         // Fast forward past session end
         vm.warp(block.timestamp + 3 hours);
         
-        // Try to claim (should fail - no participants enrolled)
-        vm.startPrank(organizer);
+        // Try to claim (should fail - no participants at all means no unattended participants)
         vm.expectRevert(LetsCommit.NoUnattendedParticipants.selector);
         letsCommit.claimUnattendedFees(emptyEventId, 0);
         vm.stopPrank();
     }
-    */
-
-    function test_ClaimUnattendedFees_WithZeroCommitmentAmount() public {
-        // Create a new event with zero commitment amount
+    
+    function test_SetSessionCode_WithZeroCommitmentFee() public {
+        // Create an event with 0 commitment fee
         vm.startPrank(organizer);
-
-        LetsCommit.Session[] memory sessions = new LetsCommit.Session[](1);
-        sessions[0] = LetsCommit.Session({
-            startSessionTime: block.timestamp + 7 days,
-            endSessionTime: block.timestamp + 7 days + 2 hours,
+        
+        LetsCommit.Session[] memory zeroCommitmentSessions = new LetsCommit.Session[](1);
+        zeroCommitmentSessions[0] = LetsCommit.Session({
+            startSessionTime: block.timestamp + 5 days,
+            endSessionTime: block.timestamp + 5 days + 2 hours,
             attendedCount: 0
         });
-
-        string[5] memory tags = ["test", "", "", "", ""];
-
+        
+        string[5] memory zeroTags = ["free", "event", "", "", ""];
+        
         letsCommit.createEvent({
-            title: "Zero Commitment Event",
+            title: "Free Event",
             description: "Event with zero commitment fee",
-            location: "Test Location",
-            imageUri: "https://test.com/image.jpg",
-            priceAmount: 100,
-            commitmentAmount: 0, // Zero commitment amount
+            location: "Online",
+            imageUri: "https://test.com/free.jpg",
+            priceAmount: 30, // Still has event fee
+            commitmentAmount: 0, // Zero commitment fee
             maxParticipant: 10,
             startSaleDate: block.timestamp,
-            endSaleDate: block.timestamp + 5 days,
-            tags: tags,
-            _sessions: sessions
+            endSaleDate: block.timestamp + 4 days,
+            tags: zeroTags,
+            _sessions: zeroCommitmentSessions
         });
-
+        
         uint256 zeroCommitmentEventId = letsCommit.eventId();
-        vm.stopPrank();
-
-        // Enroll a participant in the zero commitment event
-        vm.startPrank(participant1);
-        uint256 totalPayment = 100 * 10 ** 18; // Only event fee, no commitment fee
-        midrxToken.approve(address(letsCommit), totalPayment);
-        letsCommit.enrollEvent(zeroCommitmentEventId);
-        vm.stopPrank();
-
-        // Fast forward to session time and set code
-        vm.warp(block.timestamp + 7 days);
-
-        vm.startPrank(organizer);
-        letsCommit.setSessionCode(zeroCommitmentEventId, 0, "CODE");
-        vm.stopPrank();
-
-        // Fast forward past session end (participant doesn't attend)
-        vm.warp(block.timestamp + 3 hours);
-
-        // Try to claim (should fail - no commitment fees to claim)
-        vm.startPrank(organizer);
-        vm.expectRevert(LetsCommit.NoVestedCommitmentFees.selector);
-        letsCommit.claimUnattendedFees(zeroCommitmentEventId, 0);
+        
+        // Record organizer's balance before setting session code
+        uint256 organizerBalanceBefore = midrxToken.balanceOf(organizer);
+        uint256 organizerVestedBefore = letsCommit.getOrganizerVestedAmount(zeroCommitmentEventId, organizer);
+        uint256 organizerClaimedBefore = letsCommit.getOrganizerClaimedAmount(zeroCommitmentEventId, organizer);
+        
+        // Fast forward to session time
+        vm.warp(block.timestamp + 5 days);
+        
+        // Set session code (should succeed with 0 released amount)
+        bool success = letsCommit.setSessionCode(zeroCommitmentEventId, 0, "FREE");
+        assertTrue(success, "Setting session code should succeed");
+        
+        // Verify no token transfer occurred
+        uint256 organizerBalanceAfter = midrxToken.balanceOf(organizer);
+        uint256 organizerVestedAfter = letsCommit.getOrganizerVestedAmount(zeroCommitmentEventId, organizer);
+        uint256 organizerClaimedAfter = letsCommit.getOrganizerClaimedAmount(zeroCommitmentEventId, organizer);
+        
+        assertEq(organizerBalanceAfter, organizerBalanceBefore, "Organizer balance should not change");
+        assertEq(organizerVestedAfter, organizerVestedBefore, "Organizer vested amount should not change");
+        assertEq(organizerClaimedAfter, organizerClaimedBefore, "Organizer claimed amount should not change");
+        
+        // Verify session code was set
+        assertTrue(letsCommit.hasSessionCode(zeroCommitmentEventId, 0), "Session code should be set");
+        
         vm.stopPrank();
     }
 

@@ -250,7 +250,7 @@ contract LetsCommitSetSessionCodeTest is Test {
         letsCommit.setSessionCode(testEventId, 0, "XYZ2");
     }
 
-    function testSetSessionCode_RevertWhen_NoVestedAmountToRelease() public {
+    function testSetSessionCode_NoVestedAmountToRelease() public {
         // Create event with multiple sessions to drain vested amount
         uint256 multiSessionEventId = _createEventWithMultipleSessions();
 
@@ -286,7 +286,6 @@ contract LetsCommitSetSessionCodeTest is Test {
         vm.warp(sessionStartTime + 1 hours);
 
         vm.prank(organizer);
-        vm.expectRevert(abi.encodeWithSelector(LetsCommit.NoVestedAmountToRelease.selector));
         letsCommit.setSessionCode(newEventId, 0, "DDD4");
     }
 
