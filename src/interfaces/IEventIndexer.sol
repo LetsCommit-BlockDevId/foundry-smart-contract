@@ -29,6 +29,11 @@ interface IEventIndexer {
     );
 
     /**
+     * @dev Log ketika organizer menset kode untuk session
+     */
+    event SetSessionCode(uint256 indexed eventId, uint8 indexed session, address organizer, uint256 releasedAmount);
+
+    /**
      * @dev Log ketika EO mengklaim 50% keuntungan setelah event berakhir masa penjualan.
      */
     event OrganizerFirstClaim(uint256 indexed eventId, address organizer, uint256 claimAmount);

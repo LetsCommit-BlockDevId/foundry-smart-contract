@@ -54,6 +54,9 @@ contract LetsCommit is IEventIndexer {
     /// @dev Storage for organizer vested amounts: organizer => eventId => vested amount
     mapping(address => mapping(uint256 => uint256)) public organizerVestedAmount;
 
+    /// @dev Storage for session codes: eventId => sessionIndex => code (4 characters)
+    mapping(uint256 => mapping(uint8 => string)) public sessionCodes;
+
     // ============================================================================
     // STRUCTS
     // ============================================================================
@@ -140,6 +143,24 @@ contract LetsCommit is IEventIndexer {
 
     /// @dev Error thrown when organizer has already claimed the first portion for this event
     error EventFeeAlreadyClaimed();
+
+    /// @dev Error thrown when session index is invalid
+    error InvalidSessionIndex();
+
+    /// @dev Error thrown when not within session time period
+    error NotWithinSessionTime();
+
+    /// @dev Error thrown when session code is empty
+    error SessionCodeEmpty();
+
+    /// @dev Error thrown when session code is not exactly 4 characters
+    error InvalidSessionCodeLength();
+
+    /// @dev Error thrown when session code has already been set
+    error SessionCodeAlreadySet();
+
+    /// @dev Error thrown when organizer has no vested amount to release
+    error NoVestedAmountToRelease();
 
     // ============================================================================
     // MODIFIERS
@@ -273,6 +294,66 @@ contract LetsCommit is IEventIndexer {
 
         // All checks passed, proceed with enrollment
         return _enrollEvent(_eventId, eventData, commitmentFeeWithDecimals, eventFeeWithDecimals, totalPayment);
+    }
+
+    /**
+     * @dev Set a code to a session so that user can attend the session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session (0-based)
+     * @param _code The session code to set (must be exactly 4 characters)
+     * @return success True if session code was set successfully
+     */
+    function setSessionCode(uint256 _eventId, uint8 _sessionIndex, string calldata _code)
+        external
+        eventExists(_eventId)
+        returns (bool success)
+    {
+        Event memory eventData = events[_eventId];
+
+        // CHECKS: Validate all conditions
+
+        // Check 1: msg.sender is organizer of that event
+        if (msg.sender != eventData.organizer) {
+            revert NotEventOrganizer();
+        }
+
+        // Check 2: Session index is valid
+        if (_sessionIndex >= eventData.totalSession) {
+            revert InvalidSessionIndex();
+        }
+
+        // Check 3: Currently within session time period
+        Session memory sessionData = sessions[_eventId][_sessionIndex];
+        if (block.timestamp < sessionData.startSessionTime || block.timestamp > sessionData.endSessionTime) {
+            revert NotWithinSessionTime();
+        }
+
+        // Check 4: Code is exactly 4 characters
+        if (bytes(_code).length != 4) {
+            revert InvalidSessionCodeLength();
+        }
+
+        // Check 5: Session code hasn't been set before (check if string is empty)
+        if (bytes(sessionCodes[_eventId][_sessionIndex]).length > 0) {
+            revert SessionCodeAlreadySet();
+        }
+
+        // Calculate vested amount to release
+        uint256 releasedAmount = _calculateVestedAmountPerSession(_eventId);
+
+        // Check 6: Organizer has vested amount to release
+        uint256 vestedAmount = organizerVestedAmount[msg.sender][_eventId];
+        if (vestedAmount < releasedAmount) {
+            revert NoVestedAmountToRelease();
+        }
+
+        // Calculate if there is some dust amount left after releasing, then send the remaining dust on the last claim
+        if (vestedAmount > 0 && vestedAmount - releasedAmount < releasedAmount) {
+            releasedAmount += (vestedAmount - releasedAmount);
+        }
+
+        // All checks passed, proceed with setting session code
+        return _setSessionCode(_eventId, _sessionIndex, _code, releasedAmount);
     }
 
     /**
@@ -543,6 +624,65 @@ contract LetsCommit is IEventIndexer {
         return true;
     }
 
+    /**
+     * @dev Internal function to set session code and release vested amount (EFFECTS & INTERACTIONS phase)
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @param _code The session code to set
+     * @param releasedAmount The amount to release to organizer
+     * @return success True if session code was set successfully
+     */
+    function _setSessionCode(uint256 _eventId, uint8 _sessionIndex, string calldata _code, uint256 releasedAmount)
+        internal
+        returns (bool success)
+    {
+        // EFFECTS: Update contract state
+
+        // Store the session code
+        sessionCodes[_eventId][_sessionIndex] = _code;
+
+        // Move vested amount to claimed amount
+        organizerVestedAmount[msg.sender][_eventId] -= releasedAmount;
+        // Track the claimed amount
+        organizerClaimedAmount[msg.sender][_eventId] += releasedAmount;
+
+        // INTERACTIONS: Transfer tokens to organizer
+        bool transferSuccess = mIDRXToken.transfer(msg.sender, releasedAmount);
+        if (!transferSuccess) {
+            revert TokenTransferFailed();
+        }
+
+        // Emit event
+        emit SetSessionCode({
+            eventId: _eventId,
+            session: _sessionIndex,
+            organizer: msg.sender,
+            releasedAmount: releasedAmount
+        });
+
+        return true;
+    }
+
+    /**
+     * @dev Internal function to calculate vested amount per session
+     * Formula: (Event Fee / 2) / Total Sessions
+     * @param _eventId The ID of the event
+     * @return amount The vested amount to release per session
+     */
+    function _calculateVestedAmountPerSession(uint256 _eventId) internal view returns (uint256 amount) {
+        Event memory eventData = events[_eventId];
+
+        // Get token decimals for proper calculation
+        uint8 tokenDecimals = mIDRXToken.decimals();
+
+        // Calculate event fee with decimals (50% of total event fee is vested)
+        uint256 eventFeeWithDecimals = eventData.priceAmount * (10 ** tokenDecimals);
+        uint256 totalVestedAmount = eventFeeWithDecimals / 2; // 50% is vested
+
+        // Divide by total sessions to get amount per session
+        return totalVestedAmount / eventData.totalSession;
+    }
+
     // ============================================================================
     // VIEW FUNCTIONS
     // ============================================================================
@@ -660,6 +800,35 @@ contract LetsCommit is IEventIndexer {
         returns (uint256 claimed)
     {
         return organizerClaimedAmount[_organizer][_eventId];
+    }
+
+    /**
+     * @dev Calculates the vested amount that will be released per session for organizer
+     * @param _eventId The ID of the event
+     * @return amount The amount that will be released per session for organizer
+     */
+    function getOrganizerVestedAmountPerSession(uint256 _eventId)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 amount)
+    {
+        return _calculateVestedAmountPerSession(_eventId);
+    }
+
+    /**
+     * @dev Checks if session code has been set for a specific session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return hasCode True if session code has been set
+     */
+    function hasSessionCode(uint256 _eventId, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (bool hasCode)
+    {
+        return bytes(sessionCodes[_eventId][_sessionIndex]).length > 0;
     }
 
     // ============================================================================
