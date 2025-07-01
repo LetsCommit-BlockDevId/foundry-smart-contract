@@ -17,7 +17,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
     LetsCommit public letsCommit;
     mIDRX public mIDRXToken;
-    
+
     address public deployer = makeAddr("deployer");
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
@@ -53,7 +53,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
     function setUp() public {
         // Start at a fixed timestamp to have predictable time handling
         vm.warp(1000000000); // Set to a fixed timestamp
-        
+
         vm.startPrank(deployer);
         mIDRXToken = new mIDRX();
         letsCommit = new LetsCommit(address(mIDRXToken));
@@ -74,10 +74,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
     // ============================================================================
 
     function _createBasicSession() internal view returns (LetsCommit.Session memory) {
-        return LetsCommit.Session({
-            startSessionTime: sessionStartTime,
-            endSessionTime: sessionEndTime
-        });
+        return LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime});
     }
 
     function _createTestEvent() internal returns (uint256 eventId) {
@@ -89,15 +86,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         require(success, "Event creation failed");
@@ -215,11 +204,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         // Check claimed amount after
         uint256 claimedAfter = letsCommit.getOrganizerClaimedAmount(testEventId, organizer);
-        assertEq(
-            claimedAfter,
-            expectedClaimAmount,
-            "Claimed amount should equal the claimed amount"
-        );
+        assertEq(claimedAfter, expectedClaimAmount, "Claimed amount should equal the claimed amount");
     }
 
     /**
@@ -318,15 +303,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         vm.prank(organizer2);
         bool createSuccess = letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
         assertTrue(createSuccess, "Event creation should succeed");
 

@@ -17,7 +17,7 @@ contract LetsCommitCreateEventTest is Test {
 
     LetsCommit public letsCommit;
     mIDRX public mIDRXToken;
-    
+
     address public deployer = makeAddr("deployer");
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
@@ -55,14 +55,14 @@ contract LetsCommitCreateEventTest is Test {
 
     function createMultipleSessions(uint8 count) internal view returns (LetsCommit.Session[] memory) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](count);
-        
+
         for (uint8 i = 0; i < count; i++) {
             sessions[i] = LetsCommit.Session({
                 startSessionTime: block.timestamp + 10 days + (i * 1 days),
                 endSessionTime: block.timestamp + 10 days + (i * 1 days) + 2 hours
             });
         }
-        
+
         return sessions;
     }
 
@@ -72,26 +72,18 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_CreateEventSuccess() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
-        
+
         assertTrue(success);
         assertEq(letsCommit.eventId(), 1);
-        
+
         // Verify event data
         LetsCommit.Event memory eventData = letsCommit.getEvent(1);
         assertEq(eventData.organizer, organizer);
@@ -105,29 +97,21 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_CreateEventWithSingleSession() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(1);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
-        
+
         assertTrue(success);
-        
+
         LetsCommit.Event memory eventData = letsCommit.getEvent(1);
         assertEq(eventData.totalSession, 1);
         assertEq(eventData.lastSessionEndTime, sessions[0].endSessionTime);
-        
+
         // Verify session data
         LetsCommit.Session memory sessionData = letsCommit.getSession(1, 0);
         assertEq(sessionData.startSessionTime, sessions[0].startSessionTime);
@@ -137,25 +121,17 @@ contract LetsCommitCreateEventTest is Test {
     function test_CreateEventWithMaxSessions() public {
         uint8 maxSessions = letsCommit.maxSessionsPerEvent();
         LetsCommit.Session[] memory sessions = createMultipleSessions(maxSessions);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
-        
+
         assertTrue(success);
-        
+
         LetsCommit.Event memory eventData = letsCommit.getEvent(1);
         assertEq(eventData.totalSession, maxSessions);
         assertEq(eventData.lastSessionEndTime, sessions[maxSessions - 1].endSessionTime);
@@ -163,10 +139,10 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_CreateEventWithZeroPriceAmount() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
             TITLE,
@@ -179,9 +155,9 @@ contract LetsCommitCreateEventTest is Test {
             TAGS,
             sessions
         );
-        
+
         assertTrue(success);
-        
+
         LetsCommit.Event memory eventData = letsCommit.getEvent(1);
         assertEq(eventData.priceAmount, 0);
         assertEq(eventData.commitmentAmount, COMMITMENT_AMOUNT);
@@ -189,10 +165,10 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_CreateEventWithZeroCommitmentAmount() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
             TITLE,
@@ -205,9 +181,9 @@ contract LetsCommitCreateEventTest is Test {
             TAGS,
             sessions
         );
-        
+
         assertTrue(success);
-        
+
         LetsCommit.Event memory eventData = letsCommit.getEvent(1);
         assertEq(eventData.priceAmount, PRICE_AMOUNT);
         assertEq(eventData.commitmentAmount, 0);
@@ -215,10 +191,10 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_CreateEventWithBothAmountsZero() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
             TITLE,
@@ -231,9 +207,9 @@ contract LetsCommitCreateEventTest is Test {
             TAGS,
             sessions
         );
-        
+
         assertTrue(success);
-        
+
         LetsCommit.Event memory eventData = letsCommit.getEvent(1);
         assertEq(eventData.priceAmount, 0);
         assertEq(eventData.commitmentAmount, 0);
@@ -242,10 +218,10 @@ contract LetsCommitCreateEventTest is Test {
     function test_CreateMultipleEvents() public {
         LetsCommit.Session[] memory sessions1 = createMultipleSessions(1);
         LetsCommit.Session[] memory sessions2 = createMultipleSessions(3);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         // Create first event
         vm.prank(alice);
         letsCommit.createEvent(
@@ -259,7 +235,7 @@ contract LetsCommitCreateEventTest is Test {
             TAGS,
             sessions1
         );
-        
+
         // Create second event
         vm.prank(bob);
         letsCommit.createEvent(
@@ -273,14 +249,14 @@ contract LetsCommitCreateEventTest is Test {
             TAGS,
             sessions2
         );
-        
+
         assertEq(letsCommit.eventId(), 2);
-        
+
         // Verify first event
         LetsCommit.Event memory event1 = letsCommit.getEvent(1);
         assertEq(event1.organizer, alice);
         assertEq(event1.totalSession, 1);
-        
+
         // Verify second event
         LetsCommit.Event memory event2 = letsCommit.getEvent(2);
         assertEq(event2.organizer, bob);
@@ -294,74 +270,50 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_RevertWhen_StartSaleDateInPast() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         // Set a future timestamp for our test
         uint256 futureTime = block.timestamp + 10 days;
         vm.warp(futureTime);
-        
+
         // Now set sale dates relative to the new "current" time
         uint256 startSaleDate = futureTime - 1 days; // Past date (1 day ago)
-        uint256 endSaleDate = futureTime + 7 days;   // Future date
-        
+        uint256 endSaleDate = futureTime + 7 days; // Future date
+
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.StartSaleDateInPast.selector);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
     function test_RevertWhen_EndSaleDateInPast() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         // Set a future timestamp for our test
         uint256 futureTime = block.timestamp + 10 days;
         vm.warp(futureTime);
-        
+
         // Now set sale dates relative to the new "current" time
-        uint256 startSaleDate = futureTime + 1 days;  // Future date
-        uint256 endSaleDate = futureTime - 1 days;    // Past date (1 day ago)
-        
+        uint256 startSaleDate = futureTime + 1 days; // Future date
+        uint256 endSaleDate = futureTime - 1 days; // Past date (1 day ago)
+
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.EndSaleDateInPast.selector);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
     function test_RevertWhen_InvalidSaleDateRange() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         uint256 startSaleDate = block.timestamp + 7 days;
         uint256 endSaleDate = block.timestamp + 1 days; // End before start
-        
+
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.InvalidSaleDateRange.selector);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -371,50 +323,30 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_RevertWhen_TotalSessionsZero() public {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](0); // Empty array
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.TotalSessionsZero.selector);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
     function test_RevertWhen_TotalSessionsExceedsMax() public {
         uint8 maxSessions = letsCommit.maxSessionsPerEvent();
         LetsCommit.Session[] memory sessions = createMultipleSessions(maxSessions + 1); // Exceed max
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                LetsCommit.TotalSessionsExceedsMax.selector,
-                maxSessions + 1,
-                maxSessions
-            )
+            abi.encodeWithSelector(LetsCommit.TotalSessionsExceedsMax.selector, maxSessions + 1, maxSessions)
         );
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -425,22 +357,14 @@ contract LetsCommitCreateEventTest is Test {
             startSessionTime: block.timestamp + 2 days,
             endSessionTime: block.timestamp + 5 days // Ends before sale end date
         });
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days; // Sale ends after session
-        
+
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.LastSessionMustBeAfterSaleEnd.selector);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -450,10 +374,10 @@ contract LetsCommitCreateEventTest is Test {
 
     function test_CreateEventEmitsCorrectEvents() public {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
-        
+
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         // Expect CreateEvent emission
         vm.expectEmit(true, false, false, true);
         emit IEventIndexer.CreateEvent(
@@ -469,7 +393,7 @@ contract LetsCommitCreateEventTest is Test {
             organizer,
             TAGS
         );
-        
+
         // Expect CreateSession emissions
         vm.expectEmit(true, true, false, true);
         emit IEventIndexer.CreateSession(
@@ -479,7 +403,7 @@ contract LetsCommitCreateEventTest is Test {
             sessions[0].startSessionTime,
             sessions[0].endSessionTime
         );
-        
+
         vm.expectEmit(true, true, false, true);
         emit IEventIndexer.CreateSession(
             1, // eventId
@@ -488,18 +412,10 @@ contract LetsCommitCreateEventTest is Test {
             sessions[1].startSessionTime,
             sessions[1].endSessionTime
         );
-        
+
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 }

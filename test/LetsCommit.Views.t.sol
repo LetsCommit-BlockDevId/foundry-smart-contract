@@ -17,7 +17,7 @@ contract LetsCommitViewsTest is Test {
 
     LetsCommit public letsCommit;
     mIDRX public mIDRXToken;
-    
+
     address public deployer = makeAddr("deployer");
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
@@ -48,14 +48,14 @@ contract LetsCommitViewsTest is Test {
 
     function createMultipleSessions(uint8 count) internal view returns (LetsCommit.Session[] memory) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](count);
-        
+
         for (uint8 i = 0; i < count; i++) {
             sessions[i] = LetsCommit.Session({
                 startSessionTime: block.timestamp + 10 days + (i * 1 days),
                 endSessionTime: block.timestamp + 10 days + (i * 1 days) + 2 hours
             });
         }
-        
+
         return sessions;
     }
 
@@ -63,20 +63,12 @@ contract LetsCommitViewsTest is Test {
         LetsCommit.Session[] memory sessions = createMultipleSessions(2);
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
         );
-        
+
         return 1; // First event ID
     }
 
@@ -85,17 +77,15 @@ contract LetsCommitViewsTest is Test {
     // ============================================================================
 
     function test_RevertWhen_GetNonExistentEvent() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999)
-        );
+        vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getEvent(999);
     }
 
     function test_GetEventData() public {
         uint256 eventId = createTestEvent();
-        
+
         LetsCommit.Event memory eventData = letsCommit.getEvent(eventId);
-        
+
         assertEq(eventData.organizer, organizer);
         assertEq(eventData.priceAmount, PRICE_AMOUNT);
         assertEq(eventData.commitmentAmount, COMMITMENT_AMOUNT);
@@ -107,12 +97,12 @@ contract LetsCommitViewsTest is Test {
     function test_GetSessionData() public {
         uint256 eventId = createTestEvent();
         LetsCommit.Session[] memory originalSessions = createMultipleSessions(2);
-        
+
         // Test getting session data
         LetsCommit.Session memory session0 = letsCommit.getSession(eventId, 0);
         assertEq(session0.startSessionTime, originalSessions[0].startSessionTime);
         assertEq(session0.endSessionTime, originalSessions[0].endSessionTime);
-        
+
         LetsCommit.Session memory session1 = letsCommit.getSession(eventId, 1);
         assertEq(session1.startSessionTime, originalSessions[1].startSessionTime);
         assertEq(session1.endSessionTime, originalSessions[1].endSessionTime);
@@ -120,26 +110,26 @@ contract LetsCommitViewsTest is Test {
 
     function test_IsParticipantEnrolled() public {
         uint256 eventId = createTestEvent();
-        
+
         // Before enrollment
         assertFalse(letsCommit.isParticipantEnrolled(eventId, alice));
-        
+
         // Setup for enrollment
         uint8 tokenDecimals = mIDRXToken.decimals();
         uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
-        
+
         vm.prank(deployer);
         mIDRXToken.mint(alice, totalPayment);
-        
+
         vm.prank(alice);
         mIDRXToken.approve(address(letsCommit), totalPayment);
-        
+
         // Move to sale period and enroll
         vm.warp(block.timestamp + 1 days + 1 hours);
-        
+
         vm.prank(alice);
         letsCommit.enrollEvent(eventId);
-        
+
         // After enrollment
         assertTrue(letsCommit.isParticipantEnrolled(eventId, alice));
         assertFalse(letsCommit.isParticipantEnrolled(eventId, bob)); // Bob hasn't enrolled
@@ -147,55 +137,55 @@ contract LetsCommitViewsTest is Test {
 
     function test_GetParticipantCommitmentFee() public {
         uint256 eventId = createTestEvent();
-        
+
         // Setup for enrollment
         uint8 tokenDecimals = mIDRXToken.decimals();
         uint256 commitmentFeeWithDecimals = COMMITMENT_AMOUNT * (10 ** tokenDecimals);
         uint256 eventFeeWithDecimals = PRICE_AMOUNT * (10 ** tokenDecimals);
         uint256 totalPayment = commitmentFeeWithDecimals + eventFeeWithDecimals;
-        
+
         vm.prank(deployer);
         mIDRXToken.mint(alice, totalPayment);
-        
+
         vm.prank(alice);
         mIDRXToken.approve(address(letsCommit), totalPayment);
-        
+
         // Before enrollment
         assertEq(letsCommit.getParticipantCommitmentFee(eventId, alice), 0);
-        
+
         // Move to sale period and enroll
         vm.warp(block.timestamp + 1 days + 1 hours);
-        
+
         vm.prank(alice);
         letsCommit.enrollEvent(eventId);
-        
+
         // After enrollment
         assertEq(letsCommit.getParticipantCommitmentFee(eventId, alice), commitmentFeeWithDecimals);
     }
 
     function test_GetOrganizerClaimableAmount() public {
         uint256 eventId = createTestEvent();
-        
+
         // Setup for enrollment
         uint8 tokenDecimals = mIDRXToken.decimals();
         uint256 eventFeeWithDecimals = PRICE_AMOUNT * (10 ** tokenDecimals);
         uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
-        
+
         vm.prank(deployer);
         mIDRXToken.mint(alice, totalPayment);
-        
+
         vm.prank(alice);
         mIDRXToken.approve(address(letsCommit), totalPayment);
-        
+
         // Before enrollment
         assertEq(letsCommit.getOrganizerClaimableAmount(eventId, organizer), 0);
-        
+
         // Move to sale period and enroll
         vm.warp(block.timestamp + 1 days + 1 hours);
-        
+
         vm.prank(alice);
         letsCommit.enrollEvent(eventId);
-        
+
         // After enrollment
         uint256 expectedClaimable = eventFeeWithDecimals / 2;
         assertEq(letsCommit.getOrganizerClaimableAmount(eventId, organizer), expectedClaimable);
@@ -203,27 +193,27 @@ contract LetsCommitViewsTest is Test {
 
     function test_GetOrganizerVestedAmount() public {
         uint256 eventId = createTestEvent();
-        
+
         // Setup for enrollment
         uint8 tokenDecimals = mIDRXToken.decimals();
         uint256 eventFeeWithDecimals = PRICE_AMOUNT * (10 ** tokenDecimals);
         uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
-        
+
         vm.prank(deployer);
         mIDRXToken.mint(alice, totalPayment);
-        
+
         vm.prank(alice);
         mIDRXToken.approve(address(letsCommit), totalPayment);
-        
+
         // Before enrollment
         assertEq(letsCommit.getOrganizerVestedAmount(eventId, organizer), 0);
-        
+
         // Move to sale period and enroll
         vm.warp(block.timestamp + 1 days + 1 hours);
-        
+
         vm.prank(alice);
         letsCommit.enrollEvent(eventId);
-        
+
         // After enrollment
         uint256 expectedVested = eventFeeWithDecimals - (eventFeeWithDecimals / 2);
         assertEq(letsCommit.getOrganizerVestedAmount(eventId, organizer), expectedVested);
@@ -231,23 +221,23 @@ contract LetsCommitViewsTest is Test {
 
     function test_GetParticipantAttendance() public {
         uint256 eventId = createTestEvent();
-        
+
         // Setup for enrollment
         uint8 tokenDecimals = mIDRXToken.decimals();
         uint256 totalPayment = (COMMITMENT_AMOUNT + PRICE_AMOUNT) * (10 ** tokenDecimals);
-        
+
         vm.prank(deployer);
         mIDRXToken.mint(alice, totalPayment);
-        
+
         vm.prank(alice);
         mIDRXToken.approve(address(letsCommit), totalPayment);
-        
+
         // Move to sale period and enroll
         vm.warp(block.timestamp + 1 days + 1 hours);
-        
+
         vm.prank(alice);
         letsCommit.enrollEvent(eventId);
-        
+
         // Check attendance (should be 0 initially since no attendance recorded)
         assertEq(letsCommit.getParticipantAttendance(eventId, alice, 0), 0);
         assertEq(letsCommit.getParticipantAttendance(eventId, alice, 1), 0);
@@ -256,12 +246,12 @@ contract LetsCommitViewsTest is Test {
     function test_ViewFunctionsWithMultipleEvents() public {
         // Create first event
         uint256 event1Id = createTestEvent();
-        
+
         // Create second event with different organizer
         LetsCommit.Session[] memory sessions = createMultipleSessions(1);
         uint256 startSaleDate = block.timestamp + 2 days;
         uint256 endSaleDate = block.timestamp + 8 days;
-        
+
         vm.prank(alice);
         letsCommit.createEvent(
             "Event 2",
@@ -275,19 +265,19 @@ contract LetsCommitViewsTest is Test {
             sessions
         );
         uint256 event2Id = 2;
-        
+
         // Test that view functions return correct data for each event
         LetsCommit.Event memory event1Data = letsCommit.getEvent(event1Id);
         LetsCommit.Event memory event2Data = letsCommit.getEvent(event2Id);
-        
+
         assertEq(event1Data.organizer, organizer);
         assertEq(event1Data.priceAmount, PRICE_AMOUNT);
         assertEq(event1Data.totalSession, 2);
-        
+
         assertEq(event2Data.organizer, alice);
         assertEq(event2Data.priceAmount, PRICE_AMOUNT * 2);
         assertEq(event2Data.totalSession, 1);
-        
+
         // Test organizer balances are separate
         assertEq(letsCommit.getOrganizerClaimableAmount(event1Id, organizer), 0);
         assertEq(letsCommit.getOrganizerClaimableAmount(event2Id, alice), 0);
@@ -297,26 +287,26 @@ contract LetsCommitViewsTest is Test {
 
     function test_ViewFunctionsNonExistentEventRevert() public {
         createTestEvent();
-        
+
         // All view functions should revert for non-existent events
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getEvent(999);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getSession(999, 0);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.isParticipantEnrolled(999, alice);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getParticipantCommitmentFee(999, alice);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getOrganizerClaimableAmount(999, organizer);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getOrganizerVestedAmount(999, organizer);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, 999));
         letsCommit.getParticipantAttendance(999, alice, 0);
     }

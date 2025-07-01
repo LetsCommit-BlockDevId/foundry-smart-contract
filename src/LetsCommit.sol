@@ -38,10 +38,10 @@ contract LetsCommit is IEventIndexer {
 
     /// @dev Storage for events
     mapping(uint256 => Event) public events;
-    
+
     /// @dev Storage for sessions: eventId => sessionIndex => Session
     mapping(uint256 => mapping(uint8 => Session)) public sessions;
-    
+
     /// @dev Storage for participants: eventId => participant address => Participant
     mapping(uint256 => mapping(address => Participant)) public participants;
 
@@ -204,7 +204,7 @@ contract LetsCommit is IEventIndexer {
         if (startSaleDate < block.timestamp) revert StartSaleDateInPast();
         if (endSaleDate < block.timestamp) revert EndSaleDateInPast();
         if (startSaleDate > endSaleDate) revert InvalidSaleDateRange();
-        
+
         // Validate session count
         uint8 totalSession = uint8(_sessions.length);
         if (totalSession == 0) revert TotalSessionsZero();
@@ -212,21 +212,13 @@ contract LetsCommit is IEventIndexer {
 
         // Find the last session end time (assuming sessions are ordered)
         uint256 lastSessionEndTime = _sessions[totalSession - 1].endSessionTime;
-        
+
         // Validate that last session ends after sale period
         if (lastSessionEndTime <= endSaleDate) revert LastSessionMustBeAfterSaleEnd();
-        
+
         // EFFECTS & INTERACTIONS: Create the event
         return _createEvent(
-            title,
-            description,
-            imageUri,
-            priceAmount,
-            commitmentAmount,
-            startSaleDate,
-            endSaleDate,
-            tags,
-            _sessions
+            title, description, imageUri, priceAmount, commitmentAmount, startSaleDate, endSaleDate, tags, _sessions
         );
     }
 
@@ -246,39 +238,39 @@ contract LetsCommit is IEventIndexer {
      */
     function enrollEvent(uint256 _eventId) external eventExists(_eventId) returns (bool success) {
         Event memory eventData = events[_eventId];
-        
+
         // CHECKS: Validate all enrollment conditions
-        
+
         // Check if participant is already enrolled
         if (participants[_eventId][msg.sender].enrolledDate > 0) {
             revert ParticipantAlreadyEnrolled();
         }
-        
+
         // Check if event is in sale period
         if (block.timestamp < eventData.startSaleDate || block.timestamp > eventData.endSaleDate) {
             revert EventNotInSalePeriod();
         }
-        
+
         // Get token decimals for proper calculation
         uint8 tokenDecimals = mIDRXToken.decimals();
-        
+
         // Calculate total payment required (commitment fee + event fee) with proper decimals
         uint256 commitmentFeeWithDecimals = eventData.commitmentAmount * (10 ** tokenDecimals);
         uint256 eventFeeWithDecimals = eventData.priceAmount * (10 ** tokenDecimals);
         uint256 totalPayment = commitmentFeeWithDecimals + eventFeeWithDecimals;
-        
+
         // Check if user has approved enough tokens
         uint256 allowance = mIDRXToken.allowance(msg.sender, address(this));
         if (allowance < totalPayment) {
             revert InsufficientAllowance(totalPayment, allowance);
         }
-        
+
         // Check if user has sufficient balance
         uint256 userBalance = mIDRXToken.balanceOf(msg.sender);
         if (userBalance < totalPayment) {
             revert InsufficientBalance(totalPayment, userBalance);
         }
-        
+
         // All checks passed, proceed with enrollment
         return _enrollEvent(_eventId, eventData, commitmentFeeWithDecimals, eventFeeWithDecimals, totalPayment);
     }
@@ -353,17 +345,9 @@ contract LetsCommit is IEventIndexer {
      * TODO: Remove this function and use individual functions above
      */
     function claim() public returns (bool) {
-        emit OrganizerFirstClaim({
-            eventId: ++eventIdClaim,
-            organizer: address(0x0),
-            claimAmount: 10_000 / 2
-        });
+        emit OrganizerFirstClaim({eventId: ++eventIdClaim, organizer: address(0x0), claimAmount: 10_000 / 2});
 
-        emit OrganizerLastClaim({
-            eventId: eventIdClaim,
-            organizer: address(0x0),
-            claimAmount: 10_000 / 2
-        });
+        emit OrganizerLastClaim({eventId: eventIdClaim, organizer: address(0x0), claimAmount: 10_000 / 2});
 
         return true;
     }
@@ -373,11 +357,7 @@ contract LetsCommit is IEventIndexer {
      * TODO: Remove this function and use individual functions above
      */
     function enrollAndAttend() public returns (bool) {
-        emit EnrollEvent({
-            eventId: ++eventIdEnroll,
-            participant: address(0x1),
-            debitAmount: 10_000
-        });
+        emit EnrollEvent({eventId: ++eventIdEnroll, participant: address(0x1), debitAmount: 10_000});
 
         emit AttendEventSession({
             eventId: eventIdEnroll,
@@ -428,10 +408,10 @@ contract LetsCommit is IEventIndexer {
         // EFFECTS: Update contract state
         uint8 totalSession = uint8(_sessions.length);
         uint256 lastSessionEndTime = _sessions[totalSession - 1].endSessionTime;
-        
+
         // Increment event ID and store event data
         uint256 newEventId = ++eventId;
-        
+
         // Store important data on-chain
         events[newEventId] = Event({
             organizer: msg.sender,
@@ -445,10 +425,8 @@ contract LetsCommit is IEventIndexer {
 
         // Store sessions on-chain
         for (uint8 i = 0; i < totalSession; i++) {
-            sessions[newEventId][i] = Session({
-                startSessionTime: _sessions[i].startSessionTime,
-                endSessionTime: _sessions[i].endSessionTime
-            });
+            sessions[newEventId][i] =
+                Session({startSessionTime: _sessions[i].startSessionTime, endSessionTime: _sessions[i].endSessionTime});
         }
 
         // INTERACTIONS: Emit events
@@ -501,27 +479,23 @@ contract LetsCommit is IEventIndexer {
         if (!transferSuccess) {
             revert TokenTransferFailed();
         }
-        
+
         // EFFECTS: Update contract state after successful transfer
-        
+
         // Store participant's enrollment data
         participants[_eventId][msg.sender].enrolledDate = block.timestamp;
         participants[_eventId][msg.sender].commitmentFee = commitmentFeeWithDecimals;
-        
+
         // Calculate organizer earnings distribution
         uint256 immediateClaimable = eventFeeWithDecimals / 2; // 50% immediately claimable
         uint256 vestedAmount = eventFeeWithDecimals - immediateClaimable; // Remaining 50% vested
-        
+
         // Update organizer's claimable and vested amounts for this event
         organizerClaimableAmount[eventData.organizer][_eventId] += immediateClaimable;
         organizerVestedAmount[eventData.organizer][_eventId] += vestedAmount;
-        
+
         // Emit enrollment event
-        emit EnrollEvent({
-            eventId: _eventId,
-            participant: msg.sender,
-            debitAmount: totalPayment
-        });
+        emit EnrollEvent({eventId: _eventId, participant: msg.sender, debitAmount: totalPayment});
 
         return true;
     }
@@ -533,42 +507,38 @@ contract LetsCommit is IEventIndexer {
      */
     function _claimOrganizerClaimableEventFee(uint256 _eventId) internal returns (bool success) {
         Event memory eventData = events[_eventId];
-        
+
         // CHECKS: Validate all claim conditions
-        
+
         // Check 1: Event exists (already validated by eventExists modifier)
-        
+
         // Check 2: msg.sender is organizer of that event id
         if (msg.sender != eventData.organizer) {
             revert NotEventOrganizer();
         }
-        
+
         // Check 3: That event id's organizer's claimable vault is more than 0
         uint256 claimableAmount = organizerClaimableAmount[msg.sender][_eventId];
         if (claimableAmount == 0) {
             revert NoClaimableAmount();
         }
-        
+
         // EFFECTS: Update contract state
-        
+
         // Reset claimable amount to 0 (all tokens will be sent)
         organizerClaimableAmount[msg.sender][_eventId] = 0;
 
         // Track the claimed amount for this organizer and event because we want to enable multiple claims between the sale period
         organizerClaimedAmount[msg.sender][_eventId] += claimableAmount;
-        
+
         // INTERACTIONS: Transfer tokens to organizer
         bool transferSuccess = mIDRXToken.transfer(msg.sender, claimableAmount);
         if (!transferSuccess) {
             revert TokenTransferFailed();
         }
-        
+
         // Emit claim event
-        emit OrganizerFirstClaim({
-            eventId: _eventId,
-            organizer: msg.sender,
-            claimAmount: claimableAmount
-        });
+        emit OrganizerFirstClaim({eventId: _eventId, organizer: msg.sender, claimAmount: claimableAmount});
 
         return true;
     }
@@ -592,7 +562,12 @@ contract LetsCommit is IEventIndexer {
      * @param _sessionIndex The index of the session
      * @return Session data stored on-chain
      */
-    function getSession(uint256 _eventId, uint8 _sessionIndex) external view eventExists(_eventId) returns (Session memory) {
+    function getSession(uint256 _eventId, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (Session memory)
+    {
         return sessions[_eventId][_sessionIndex];
     }
 
@@ -602,7 +577,12 @@ contract LetsCommit is IEventIndexer {
      * @param _participant The address of the participant
      * @return enrolled True if participant is enrolled
      */
-    function isParticipantEnrolled(uint256 _eventId, address _participant) external view eventExists(_eventId) returns (bool enrolled) {
+    function isParticipantEnrolled(uint256 _eventId, address _participant)
+        external
+        view
+        eventExists(_eventId)
+        returns (bool enrolled)
+    {
         return participants[_eventId][_participant].enrolledDate > 0;
     }
 
@@ -612,7 +592,12 @@ contract LetsCommit is IEventIndexer {
      * @param _participant The address of the participant
      * @return commitmentFee The vested commitment fee amount
      */
-    function getParticipantCommitmentFee(uint256 _eventId, address _participant) external view eventExists(_eventId) returns (uint256 commitmentFee) {
+    function getParticipantCommitmentFee(uint256 _eventId, address _participant)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 commitmentFee)
+    {
         return participants[_eventId][_participant].commitmentFee;
     }
 
@@ -622,7 +607,12 @@ contract LetsCommit is IEventIndexer {
      * @param _organizer The address of the organizer
      * @return claimableAmount The immediately claimable amount
      */
-    function getOrganizerClaimableAmount(uint256 _eventId, address _organizer) external view eventExists(_eventId) returns (uint256 claimableAmount) {
+    function getOrganizerClaimableAmount(uint256 _eventId, address _organizer)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 claimableAmount)
+    {
         return organizerClaimableAmount[_organizer][_eventId];
     }
 
@@ -632,7 +622,12 @@ contract LetsCommit is IEventIndexer {
      * @param _organizer The address of the organizer
      * @return vestedAmount The vested amount
      */
-    function getOrganizerVestedAmount(uint256 _eventId, address _organizer) external view eventExists(_eventId) returns (uint256 vestedAmount) {
+    function getOrganizerVestedAmount(uint256 _eventId, address _organizer)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 vestedAmount)
+    {
         return organizerVestedAmount[_organizer][_eventId];
     }
 
@@ -643,7 +638,12 @@ contract LetsCommit is IEventIndexer {
      * @param _sessionIndex The index of the session
      * @return attendanceTimestamp The timestamp when participant attended (0 if not attended)
      */
-    function getParticipantAttendance(uint256 _eventId, address _participant, uint8 _sessionIndex) external view eventExists(_eventId) returns (uint256 attendanceTimestamp) {
+    function getParticipantAttendance(uint256 _eventId, address _participant, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 attendanceTimestamp)
+    {
         return participants[_eventId][_participant].attendance[_sessionIndex];
     }
 
@@ -653,7 +653,12 @@ contract LetsCommit is IEventIndexer {
      * @param _organizer The address of the organizer
      * @return claimed more than 0 if organizer has already claimed the first portion
      */
-    function getOrganizerClaimedAmount(uint256 _eventId, address _organizer) external view eventExists(_eventId) returns (uint256 claimed) {
+    function getOrganizerClaimedAmount(uint256 _eventId, address _organizer)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 claimed)
+    {
         return organizerClaimedAmount[_organizer][_eventId];
     }
 

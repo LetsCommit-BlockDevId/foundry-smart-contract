@@ -17,7 +17,7 @@ contract LetsCommitAdminTest is Test {
 
     LetsCommit public letsCommit;
     mIDRX public mIDRXToken;
-    
+
     address public deployer = makeAddr("deployer");
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
@@ -48,14 +48,14 @@ contract LetsCommitAdminTest is Test {
 
     function createMultipleSessions(uint8 count) internal view returns (LetsCommit.Session[] memory) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](count);
-        
+
         for (uint8 i = 0; i < count; i++) {
             sessions[i] = LetsCommit.Session({
                 startSessionTime: block.timestamp + 10 days + (i * 1 days),
                 endSessionTime: block.timestamp + 10 days + (i * 1 days) + 2 hours
             });
         }
-        
+
         return sessions;
     }
 
@@ -65,27 +65,27 @@ contract LetsCommitAdminTest is Test {
 
     function test_SetMaxSessionsPerEvent_ProtocolAdminCanChange() public {
         uint8 newMaxSessions = 20;
-        
+
         // Check initial value
         assertEq(letsCommit.maxSessionsPerEvent(), 12);
         assertEq(letsCommit.protocolAdmin(), deployer);
-        
+
         // Protocol admin (deployer) should be able to change it
         vm.prank(deployer);
         letsCommit.setMaxSessionsPerEvent(newMaxSessions);
-        
+
         // Verify the change
         assertEq(letsCommit.maxSessionsPerEvent(), newMaxSessions);
     }
 
     function test_RevertWhen_NonProtocolAdminTriesToChangeMaxSessions() public {
         uint8 newMaxSessions = 20;
-        
+
         // Non-admin user tries to change max sessions
         vm.prank(alice);
         vm.expectRevert(LetsCommit.NotProtocolAdmin.selector);
         letsCommit.setMaxSessionsPerEvent(newMaxSessions);
-        
+
         // Verify no change occurred
         assertEq(letsCommit.maxSessionsPerEvent(), 12);
     }
@@ -95,7 +95,7 @@ contract LetsCommitAdminTest is Test {
         vm.prank(deployer);
         vm.expectRevert(LetsCommit.MaxSessionsZero.selector);
         letsCommit.setMaxSessionsPerEvent(0);
-        
+
         // Verify no change occurred
         assertEq(letsCommit.maxSessionsPerEvent(), 12);
     }
@@ -105,7 +105,7 @@ contract LetsCommitAdminTest is Test {
         vm.prank(deployer);
         letsCommit.setMaxSessionsPerEvent(1);
         assertEq(letsCommit.maxSessionsPerEvent(), 1);
-        
+
         // Test setting to maximum uint8 value
         vm.prank(deployer);
         letsCommit.setMaxSessionsPerEvent(255);
@@ -116,37 +116,23 @@ contract LetsCommitAdminTest is Test {
         // Reduce max sessions to 2
         vm.prank(deployer);
         letsCommit.setMaxSessionsPerEvent(2);
-        
+
         // Creating event with 2 sessions should work
         LetsCommit.Session[] memory sessions2 = createMultipleSessions(2);
         uint256 startSaleDate = block.timestamp + 1 days;
         uint256 endSaleDate = block.timestamp + 7 days;
-        
+
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
-            PRICE_AMOUNT,
-            COMMITMENT_AMOUNT,
-            startSaleDate,
-            endSaleDate,
-            TAGS,
-            sessions2
+            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions2
         );
         assertTrue(success);
-        
+
         // Creating event with 3 sessions should fail
         LetsCommit.Session[] memory sessions3 = createMultipleSessions(3);
-        
+
         vm.prank(organizer);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LetsCommit.TotalSessionsExceedsMax.selector,
-                3,
-                2
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LetsCommit.TotalSessionsExceedsMax.selector, 3, 2));
         letsCommit.createEvent(
             "Event 2",
             DESCRIPTION,

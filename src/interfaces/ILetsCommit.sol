@@ -174,19 +174,19 @@ interface ILetsCommit is IEventIndexer {
     function eventIdEnroll() external view returns (uint256);
 
     /// @dev Storage for events getter
-    function events(uint256) external view returns (
-        address organizer,
-        uint256 priceAmount,
-        uint256 commitmentAmount,
-        uint8 totalSession,
-        uint256 startSaleDate,
-        uint256 endSaleDate,
-        uint256 lastSessionEndTime
-    );
+    function events(uint256)
+        external
+        view
+        returns (
+            address organizer,
+            uint256 priceAmount,
+            uint256 commitmentAmount,
+            uint8 totalSession,
+            uint256 startSaleDate,
+            uint256 endSaleDate,
+            uint256 lastSessionEndTime
+        );
 
     /// @dev Storage for sessions getter
-    function sessions(uint256, uint8) external view returns (
-        uint256 startSessionTime,
-        uint256 endSessionTime
-    );
+    function sessions(uint256, uint8) external view returns (uint256 startSessionTime, uint256 endSessionTime);
 }
