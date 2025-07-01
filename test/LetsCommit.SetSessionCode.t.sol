@@ -79,7 +79,8 @@ contract LetsCommitSetSessionCodeTest is Test {
     // ============================================================================
 
     function _createBasicSession() internal view returns (LetsCommit.Session memory) {
-        return LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime});
+        return
+            LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime, attendedCount: 0});
     }
 
     function _createTestEvent() internal returns (uint256 eventId) {
@@ -91,7 +92,17 @@ contract LetsCommitSetSessionCodeTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
 
         require(success, "Event creation failed");
@@ -122,18 +133,35 @@ contract LetsCommitSetSessionCodeTest is Test {
 
     function _createEventWithMultipleSessions() internal returns (uint256 eventId) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](3);
-        sessions[0] = LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime});
-        sessions[1] =
-            LetsCommit.Session({startSessionTime: sessionStartTime + 1 days, endSessionTime: sessionEndTime + 1 days});
-        sessions[2] =
-            LetsCommit.Session({startSessionTime: sessionStartTime + 2 days, endSessionTime: sessionEndTime + 2 days});
+        sessions[0] =
+            LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime, attendedCount: 0});
+        sessions[1] = LetsCommit.Session({
+            startSessionTime: sessionStartTime + 1 days,
+            endSessionTime: sessionEndTime + 1 days,
+            attendedCount: 0
+        });
+        sessions[2] = LetsCommit.Session({
+            startSessionTime: sessionStartTime + 2 days,
+            endSessionTime: sessionEndTime + 2 days,
+            attendedCount: 0
+        });
 
         // Ensure we're at a time before startSaleDate when creating event
         vm.warp(startSaleDate - 1 hours);
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
 
         require(success, "Event creation failed");

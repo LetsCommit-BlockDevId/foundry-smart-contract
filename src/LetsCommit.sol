@@ -32,6 +32,9 @@ contract LetsCommit is IEventIndexer {
     /// @dev Counter for enrollment events (temporary - should be removed in final implementation)
     uint256 public eventIdEnroll;
 
+    /// @dev Total protocol TVL from unattended commitment fees (30% of claimed unattended fees)
+    uint256 public protocolTVL;
+
     // ============================================================================
     // STORAGE MAPPINGS
     // ============================================================================
@@ -57,6 +60,9 @@ contract LetsCommit is IEventIndexer {
     /// @dev Storage for session codes: eventId => sessionIndex => code (4 characters)
     mapping(uint256 => mapping(uint8 => string)) public sessionCodes;
 
+    /// @dev Storage for tracking when organizer claimed unattended fees: eventId => sessionIndex => claim timestamp
+    mapping(uint256 => mapping(uint8 => uint256)) public sessionUnattendedClaimTimestamp;
+
     // ============================================================================
     // STRUCTS
     // ============================================================================
@@ -70,12 +76,14 @@ contract LetsCommit is IEventIndexer {
         uint256 startSaleDate;
         uint256 endSaleDate;
         uint256 lastSessionEndTime; // End time of the last session
+        uint256 enrolledCount; // Number of participants enrolled in this event
     }
 
     /// @dev Session data structure for on-chain storage
     struct Session {
         uint256 startSessionTime;
         uint256 endSessionTime;
+        uint256 attendedCount; // Number of participants who attended this session
     }
 
     /// @dev Participant data structure for on-chain storage
@@ -174,6 +182,18 @@ contract LetsCommit is IEventIndexer {
 
     /// @dev Error thrown when participant has already attended this session
     error ParticipantAlreadyAttended();
+
+    /// @dev Error thrown when session has not ended yet
+    error SessionNotEnded();
+
+    /// @dev Error thrown when there are no unattended participants for the session
+    error NoUnattendedParticipants();
+
+    /// @dev Error thrown when organizer has already claimed unattended fees for this session
+    error UnattendedFeesAlreadyClaimed();
+
+    /// @dev Error thrown when there are no vested commitment fees to claim
+    error NoVestedCommitmentFees();
 
     // ============================================================================
     // MODIFIERS
@@ -464,20 +484,61 @@ contract LetsCommit is IEventIndexer {
 
     /**
      * @dev Allows organizer to claim commitment fees from unattended participants
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session (0-based)
      * @return success True if claim was successful
-     * TODO: Add proper parameters and implementation
      */
-    function claimUnattendedFees() external returns (bool success) {
-        // TODO: Implement proper claim logic
-        emit OrganizerClaimUnattended({
-            eventId: eventIdEnroll,
-            session: 1,
-            unattendedPerson: 3,
-            organizer: address(0x0), // TODO: Use msg.sender
-            claimAmount: 100
-        });
+    function claimUnattendedFees(uint256 _eventId, uint8 _sessionIndex)
+        external
+        eventExists(_eventId)
+        returns (bool success)
+    {
+        Event memory eventData = events[_eventId];
 
-        return true;
+        // CHECKS: Validate all claim conditions
+
+        // Check 1: msg.sender is organizer of that event
+        if (msg.sender != eventData.organizer) {
+            revert NotEventOrganizer();
+        }
+
+        // Check 2: Session index is valid
+        if (_sessionIndex >= eventData.totalSession) {
+            revert InvalidSessionIndex();
+        }
+
+        // Check 3: Session has already ended
+        Session memory sessionData = sessions[_eventId][_sessionIndex];
+        if (block.timestamp <= sessionData.endSessionTime) {
+            revert SessionNotEnded();
+        }
+
+        // Check 4: Organizer has set the code for that session
+        if (bytes(sessionCodes[_eventId][_sessionIndex]).length == 0) {
+            revert SessionCodeNotSet();
+        }
+
+        // Check 5: Organizer hasn't already claimed unattended fees for this session
+        if (sessionUnattendedClaimTimestamp[_eventId][_sessionIndex] > 0) {
+            revert UnattendedFeesAlreadyClaimed();
+        }
+
+        // Calculate unattended participants and their commitment fees
+        (uint256 unattendedCount, uint256 totalUnattendedCommitmentFees) =
+            _calculateUnattendedFeesForSession(_eventId, _sessionIndex);
+
+        // Check 6: There are unattended participants
+        if (unattendedCount == 0) {
+            revert NoUnattendedParticipants();
+        }
+
+        // Check 7: There are vested commitment fees to claim
+        if (totalUnattendedCommitmentFees == 0) {
+            revert NoVestedCommitmentFees();
+        }
+
+        // All checks passed, proceed with claiming unattended fees
+        return _claimUnattendedFees(_eventId, _sessionIndex, unattendedCount, totalUnattendedCommitmentFees);
     }
 
     // ============================================================================
@@ -566,13 +627,17 @@ contract LetsCommit is IEventIndexer {
             totalSession: totalSession,
             startSaleDate: startSaleDate,
             endSaleDate: endSaleDate,
-            lastSessionEndTime: lastSessionEndTime
+            lastSessionEndTime: lastSessionEndTime,
+            enrolledCount: 0
         });
 
         // Store sessions on-chain
         for (uint8 i = 0; i < totalSession; i++) {
-            sessions[newEventId][i] =
-                Session({startSessionTime: _sessions[i].startSessionTime, endSessionTime: _sessions[i].endSessionTime});
+            sessions[newEventId][i] = Session({
+                startSessionTime: _sessions[i].startSessionTime,
+                endSessionTime: _sessions[i].endSessionTime,
+                attendedCount: 0
+            });
         }
 
         // INTERACTIONS: Emit events
@@ -637,6 +702,9 @@ contract LetsCommit is IEventIndexer {
         // Store participant's enrollment data
         participants[_eventId][msg.sender].enrolledDate = block.timestamp;
         participants[_eventId][msg.sender].commitmentFee = commitmentFeeWithDecimals;
+
+        // Increment enrolled count for this event
+        events[_eventId].enrolledCount++;
 
         // Calculate organizer earnings distribution
         uint256 immediateClaimable = eventFeeWithDecimals / 2; // 50% immediately claimable
@@ -770,8 +838,11 @@ contract LetsCommit is IEventIndexer {
         // Record attendance timestamp
         participants[_eventId][msg.sender].attendance[_sessionIndex] = block.timestamp;
 
-        // Increment attended sessions counter
+        // Increment attended sessions counter for participant
         participants[_eventId][msg.sender].attendedSessionsCount++;
+
+        // Increment attended count for this session
+        sessions[_eventId][_sessionIndex].attendedCount++;
 
         // Calculate attendance reward: event commitment amount divided by total sessions
         // This means each session attendance returns 1/totalSessions of the event's commitment amount
@@ -830,6 +901,92 @@ contract LetsCommit is IEventIndexer {
         returns (uint8 count)
     {
         return participants[_eventId][_participant].attendedSessionsCount;
+    }
+
+    /**
+     * @dev Internal function to calculate unattended participants and their commitment fees for a session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return unattendedCount The number of unattended participants
+     * @return totalUnattendedCommitmentFees The total commitment fees from unattended participants
+     */
+    function _calculateUnattendedFeesForSession(uint256 _eventId, uint8 _sessionIndex)
+        internal
+        view
+        returns (uint256 unattendedCount, uint256 totalUnattendedCommitmentFees)
+    {
+        Event memory eventData = events[_eventId];
+        Session memory sessionData = sessions[_eventId][_sessionIndex];
+
+        // Calculate unattended participants: enrolled - attended
+        uint256 totalEnrolled = eventData.enrolledCount;
+        uint256 attendedCount = sessionData.attendedCount;
+
+        // Ensure we don't have negative numbers due to any edge cases
+        if (attendedCount > totalEnrolled) {
+            unattendedCount = 0;
+        } else {
+            unattendedCount = totalEnrolled - attendedCount;
+        }
+
+        // Calculate total unattended commitment fees
+        if (unattendedCount > 0) {
+            // Get token decimals for proper calculation
+            uint8 tokenDecimals = mIDRXToken.decimals();
+            uint256 originalCommitmentFee = eventData.commitmentAmount * (10 ** tokenDecimals);
+            uint256 commitmentFeePerSession = originalCommitmentFee / eventData.totalSession;
+
+            // Total fees = unattended count * fee per session
+            totalUnattendedCommitmentFees = unattendedCount * commitmentFeePerSession;
+        } else {
+            totalUnattendedCommitmentFees = 0;
+        }
+
+        return (unattendedCount, totalUnattendedCommitmentFees);
+    }
+
+    /**
+     * @dev Internal function to handle claiming unattended fees (EFFECTS & INTERACTIONS phase)
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @param unattendedCount The number of unattended participants
+     * @param totalUnattendedCommitmentFees The total commitment fees from unattended participants
+     * @return success True if claim was successful
+     */
+    function _claimUnattendedFees(
+        uint256 _eventId,
+        uint8 _sessionIndex,
+        uint256 unattendedCount,
+        uint256 totalUnattendedCommitmentFees
+    ) internal returns (bool success) {
+        // EFFECTS: Update contract state
+
+        // Record the claim timestamp
+        sessionUnattendedClaimTimestamp[_eventId][_sessionIndex] = block.timestamp;
+
+        // Calculate distribution: 70% to organizer, 30% to protocol
+        uint256 organizerShare = (totalUnattendedCommitmentFees * 70) / 100;
+        uint256 protocolShare = totalUnattendedCommitmentFees - organizerShare;
+
+        // Update protocol TVL
+        protocolTVL += protocolShare;
+
+        // INTERACTIONS: Transfer tokens to organizer
+        bool transferSuccess = mIDRXToken.transfer(msg.sender, organizerShare);
+        if (!transferSuccess) {
+            revert TokenTransferFailed();
+        }
+
+        // Emit claim event
+        emit OrganizerClaimUnattended({
+            eventId: _eventId,
+            session: _sessionIndex,
+            unattendedPerson: uint8(unattendedCount),
+            organizer: msg.sender,
+            claimAmount: organizerShare
+        });
+
+        return true;
     }
 
     // ============================================================================
@@ -1011,12 +1168,97 @@ contract LetsCommit is IEventIndexer {
         return participants[_eventId][_participant].attendedSessionsCount;
     }
 
-    // ============================================================================
-    // PRIVATE FUNCTIONS
-    // ============================================================================
+    /**
+     * @dev Gets the timestamp when organizer claimed unattended fees for a session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return claimTimestamp The timestamp when unattended fees were claimed (0 if not claimed)
+     */
+    function getSessionUnattendedClaimTimestamp(uint256 _eventId, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 claimTimestamp)
+    {
+        return sessionUnattendedClaimTimestamp[_eventId][_sessionIndex];
+    }
 
-    // TODO: Add more private helper functions for complex logic
-    // function _validateEventParameters(...) private pure returns (bool) {}
-    // function _calculateClaimAmount(...) private view returns (uint256) {}
-    // function _isValidAttendanceToken(...) private pure returns (bool) {}
+    /**
+     * @dev Checks if organizer has already claimed unattended fees for a session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return claimed True if unattended fees have been claimed
+     */
+    function hasClaimedUnattendedFees(uint256 _eventId, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (bool claimed)
+    {
+        return sessionUnattendedClaimTimestamp[_eventId][_sessionIndex] > 0;
+    }
+
+    /**
+     * @dev Gets the current protocol TVL from unattended commitment fees
+     * @return tvl The total value locked in the protocol
+     */
+    function getProtocolTVL() external view returns (uint256 tvl) {
+        return protocolTVL;
+    }
+
+    /**
+     * @dev Gets the number of enrolled participants for an event
+     * @param _eventId The ID of the event
+     * @return count The number of enrolled participants
+     */
+    function getEnrolledParticipantsCount(uint256 _eventId)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 count)
+    {
+        return events[_eventId].enrolledCount;
+    }
+
+    /**
+     * @dev Preview unattended participants and fees for a session (view function)
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return unattendedCount The number of unattended participants
+     * @return totalUnattendedCommitmentFees The total commitment fees from unattended participants
+     * @return organizerShare The amount organizer would receive (70%)
+     * @return protocolShare The amount protocol would receive (30%)
+     */
+    function previewUnattendedFeesForSession(uint256 _eventId, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (
+            uint256 unattendedCount,
+            uint256 totalUnattendedCommitmentFees,
+            uint256 organizerShare,
+            uint256 protocolShare
+        )
+    {
+        (unattendedCount, totalUnattendedCommitmentFees) = _calculateUnattendedFeesForSession(_eventId, _sessionIndex);
+        organizerShare = (totalUnattendedCommitmentFees * 70) / 100;
+        protocolShare = totalUnattendedCommitmentFees - organizerShare;
+
+        return (unattendedCount, totalUnattendedCommitmentFees, organizerShare, protocolShare);
+    }
+
+    /**
+     * @dev Gets the number of participants who attended a specific session
+     * @param _eventId The ID of the event
+     * @param _sessionIndex The index of the session
+     * @return attendedCount The number of participants who attended the session
+     */
+    function getSessionAttendedCount(uint256 _eventId, uint8 _sessionIndex)
+        external
+        view
+        eventExists(_eventId)
+        returns (uint256 attendedCount)
+    {
+        return sessions[_eventId][_sessionIndex].attendedCount;
+    }
 }

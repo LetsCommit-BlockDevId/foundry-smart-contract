@@ -22,12 +22,7 @@ interface IEventIndexer {
      * @dev Log ketika event dibuat - event metadata.
      */
     event CreateEventMetadata(
-        uint256 indexed eventId,
-        string title,
-        string description,
-        string location,
-        string imageUri,
-        string[5] tag
+        uint256 indexed eventId, string title, string description, string location, string imageUri, string[5] tag
     );
 
     /**

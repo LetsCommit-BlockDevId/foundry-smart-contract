@@ -54,7 +54,8 @@ contract LetsCommitViewsTest is Test {
         for (uint8 i = 0; i < count; i++) {
             sessions[i] = LetsCommit.Session({
                 startSessionTime: block.timestamp + 10 days + (i * 1 days),
-                endSessionTime: block.timestamp + 10 days + (i * 1 days) + 2 hours
+                endSessionTime: block.timestamp + 10 days + (i * 1 days) + 2 hours,
+                attendedCount: 0
             });
         }
 
@@ -68,7 +69,17 @@ contract LetsCommitViewsTest is Test {
 
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
 
         return 1; // First event ID

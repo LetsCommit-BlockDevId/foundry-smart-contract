@@ -97,12 +97,23 @@ contract LetsCommitAttendSessionTest is Test {
 
     function _createSingleSessionEvent() internal returns (uint256 eventId) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](1);
-        sessions[0] = LetsCommit.Session({startSessionTime: session1StartTime, endSessionTime: session1EndTime});
+        sessions[0] =
+            LetsCommit.Session({startSessionTime: session1StartTime, endSessionTime: session1EndTime, attendedCount: 0});
 
         vm.warp(startSaleDate - 1 hours);
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
 
         require(success, "Single session event creation failed");
@@ -111,9 +122,12 @@ contract LetsCommitAttendSessionTest is Test {
 
     function _createMultiSessionEvent() internal returns (uint256 eventId) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](3);
-        sessions[0] = LetsCommit.Session({startSessionTime: session1StartTime, endSessionTime: session1EndTime});
-        sessions[1] = LetsCommit.Session({startSessionTime: session2StartTime, endSessionTime: session2EndTime});
-        sessions[2] = LetsCommit.Session({startSessionTime: session3StartTime, endSessionTime: session3EndTime});
+        sessions[0] =
+            LetsCommit.Session({startSessionTime: session1StartTime, endSessionTime: session1EndTime, attendedCount: 0});
+        sessions[1] =
+            LetsCommit.Session({startSessionTime: session2StartTime, endSessionTime: session2EndTime, attendedCount: 0});
+        sessions[2] =
+            LetsCommit.Session({startSessionTime: session3StartTime, endSessionTime: session3EndTime, attendedCount: 0});
 
         vm.warp(startSaleDate - 1 hours);
         vm.prank(organizer);

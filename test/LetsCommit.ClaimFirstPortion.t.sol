@@ -76,7 +76,8 @@ contract LetsCommitClaimFirstPortionTest is Test {
     // ============================================================================
 
     function _createBasicSession() internal view returns (LetsCommit.Session memory) {
-        return LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime});
+        return
+            LetsCommit.Session({startSessionTime: sessionStartTime, endSessionTime: sessionEndTime, attendedCount: 0});
     }
 
     function _createTestEvent() internal returns (uint256 eventId) {
@@ -88,7 +89,17 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
 
         require(success, "Event creation failed");
@@ -305,7 +316,17 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         vm.prank(organizer2);
         bool createSuccess = letsCommit.createEvent(
-            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
         assertTrue(createSuccess, "Event creation should succeed");
 
