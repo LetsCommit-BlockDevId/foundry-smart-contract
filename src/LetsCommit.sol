@@ -446,8 +446,10 @@ contract LetsCommit is IEventIndexer {
     /**
      * @dev Allows organizer to claim final portion of earnings
      * @return success True if claim was successful
+     * @dev not implemented because we transfer the ERC20 token during setSessionCode
      * TODO: Add proper parameters and implementation
      */
+    /*
     function claimFinalPortion() external returns (bool success) {
         // TODO: Implement proper claim logic
         emit OrganizerLastClaim({
@@ -458,6 +460,7 @@ contract LetsCommit is IEventIndexer {
 
         return true;
     }
+    */
 
     /**
      * @dev Allows organizer to claim commitment fees from unattended participants
