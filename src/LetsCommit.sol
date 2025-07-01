@@ -390,13 +390,13 @@ contract LetsCommit is IEventIndexer {
         // For events with 0 commitment fee, allow setting code without vested amount requirement
         uint256 vestedAmount = organizerVestedAmount[msg.sender][_eventId];
         Event memory eventDataForCommitmentCheck = events[_eventId];
-        
+
         if (eventDataForCommitmentCheck.commitmentAmount > 0 && eventDataForCommitmentCheck.enrolledCount > 0) {
             // Only check vested amount if event has commitment fees
             if (vestedAmount < releasedAmount) {
                 revert NoVestedAmountToRelease();
             }
-            
+
             // Calculate if there is some dust amount left after releasing, then send the remaining dust on the last claim
             if (vestedAmount > 0 && vestedAmount - releasedAmount < releasedAmount) {
                 releasedAmount += (vestedAmount - releasedAmount);
