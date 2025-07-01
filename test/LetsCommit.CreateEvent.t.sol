@@ -26,9 +26,11 @@ contract LetsCommitCreateEventTest is Test {
     // Test data
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
+    string constant LOCATION = "Online Event";
     string constant IMAGE_URI = "https://example.com/image.jpg";
     uint256 constant PRICE_AMOUNT = 1000;
     uint256 constant COMMITMENT_AMOUNT = 500;
+    uint8 constant MAX_PARTICIPANT = 50;
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     // ============================================================================
@@ -78,7 +80,7 @@ contract LetsCommitCreateEventTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         assertTrue(success);
@@ -103,7 +105,7 @@ contract LetsCommitCreateEventTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         assertTrue(success);
@@ -127,7 +129,7 @@ contract LetsCommitCreateEventTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         assertTrue(success);
@@ -147,9 +149,11 @@ contract LetsCommitCreateEventTest is Test {
         bool success = letsCommit.createEvent(
             TITLE,
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             0, // Zero price amount
             COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,
@@ -173,9 +177,11 @@ contract LetsCommitCreateEventTest is Test {
         bool success = letsCommit.createEvent(
             TITLE,
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             PRICE_AMOUNT,
             0, // Zero commitment amount
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,
@@ -199,9 +205,11 @@ contract LetsCommitCreateEventTest is Test {
         bool success = letsCommit.createEvent(
             TITLE,
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             0, // Zero price amount
             0, // Zero commitment amount
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,
@@ -227,9 +235,11 @@ contract LetsCommitCreateEventTest is Test {
         letsCommit.createEvent(
             "Event 1",
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             PRICE_AMOUNT,
             COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,
@@ -241,9 +251,11 @@ contract LetsCommitCreateEventTest is Test {
         letsCommit.createEvent(
             "Event 2",
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             PRICE_AMOUNT * 2,
             COMMITMENT_AMOUNT * 2,
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,
@@ -282,7 +294,7 @@ contract LetsCommitCreateEventTest is Test {
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.StartSaleDateInPast.selector);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -300,7 +312,7 @@ contract LetsCommitCreateEventTest is Test {
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.EndSaleDateInPast.selector);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -313,7 +325,7 @@ contract LetsCommitCreateEventTest is Test {
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.InvalidSaleDateRange.selector);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -330,7 +342,7 @@ contract LetsCommitCreateEventTest is Test {
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.TotalSessionsZero.selector);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -346,7 +358,7 @@ contract LetsCommitCreateEventTest is Test {
             abi.encodeWithSelector(LetsCommit.TotalSessionsExceedsMax.selector, maxSessions + 1, maxSessions)
         );
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -364,7 +376,7 @@ contract LetsCommitCreateEventTest is Test {
         vm.prank(organizer);
         vm.expectRevert(LetsCommit.LastSessionMustBeAfterSaleEnd.selector);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 
@@ -379,18 +391,26 @@ contract LetsCommitCreateEventTest is Test {
         uint256 endSaleDate = block.timestamp + 7 days;
 
         // Expect CreateEvent emission
-        vm.expectEmit(true, false, false, true);
+        vm.expectEmit(true, true, false, true);
         emit IEventIndexer.CreateEvent(
             1, // eventId
-            TITLE,
-            DESCRIPTION,
-            IMAGE_URI,
+            organizer, // organizer
             PRICE_AMOUNT,
             COMMITMENT_AMOUNT,
             2, // totalSession
+            MAX_PARTICIPANT,
             startSaleDate,
-            endSaleDate,
-            organizer,
+            endSaleDate
+        );
+
+        // Expect CreateEventMetadata emission
+        vm.expectEmit(true, false, false, true);
+        emit IEventIndexer.CreateEventMetadata(
+            1, // eventId
+            TITLE,
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
             TAGS
         );
 
@@ -415,7 +435,7 @@ contract LetsCommitCreateEventTest is Test {
 
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
     }
 }

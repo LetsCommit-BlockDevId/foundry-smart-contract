@@ -27,9 +27,11 @@ contract LetsCommitAttendSessionTest is Test {
     // Test data
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
+    string constant LOCATION = "Online Event";
     string constant IMAGE_URI = "https://example.com/image.jpg";
     uint256 constant PRICE_AMOUNT = 1000; // 1000 tokens (without decimals)
     uint256 constant COMMITMENT_AMOUNT = 500; // 500 tokens (without decimals)
+    uint8 constant MAX_PARTICIPANT = 50;
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     uint256 constant TOKEN_DECIMALS = 2;
@@ -72,7 +74,7 @@ contract LetsCommitAttendSessionTest is Test {
         // Setup time variables relative to current timestamp
         startSaleDate = block.timestamp + 1 days;
         endSaleDate = block.timestamp + 7 days;
-        
+
         // Sessions start after sale period
         session1StartTime = block.timestamp + 10 days;
         session1EndTime = block.timestamp + 11 days;
@@ -95,16 +97,12 @@ contract LetsCommitAttendSessionTest is Test {
 
     function _createSingleSessionEvent() internal returns (uint256 eventId) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](1);
-        sessions[0] = LetsCommit.Session({
-            startSessionTime: session1StartTime,
-            endSessionTime: session1EndTime
-        });
+        sessions[0] = LetsCommit.Session({startSessionTime: session1StartTime, endSessionTime: session1EndTime});
 
         vm.warp(startSaleDate - 1 hours);
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, 
-            startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         require(success, "Single session event creation failed");
@@ -113,24 +111,24 @@ contract LetsCommitAttendSessionTest is Test {
 
     function _createMultiSessionEvent() internal returns (uint256 eventId) {
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](3);
-        sessions[0] = LetsCommit.Session({
-            startSessionTime: session1StartTime,
-            endSessionTime: session1EndTime
-        });
-        sessions[1] = LetsCommit.Session({
-            startSessionTime: session2StartTime,
-            endSessionTime: session2EndTime
-        });
-        sessions[2] = LetsCommit.Session({
-            startSessionTime: session3StartTime,
-            endSessionTime: session3EndTime
-        });
+        sessions[0] = LetsCommit.Session({startSessionTime: session1StartTime, endSessionTime: session1EndTime});
+        sessions[1] = LetsCommit.Session({startSessionTime: session2StartTime, endSessionTime: session2EndTime});
+        sessions[2] = LetsCommit.Session({startSessionTime: session3StartTime, endSessionTime: session3EndTime});
 
         vm.warp(startSaleDate - 1 hours);
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            "Multi Session Event", DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, 
-            startSaleDate, endSaleDate, TAGS, sessions
+            "Multi Session Event",
+            DESCRIPTION,
+            LOCATION,
+            IMAGE_URI,
+            PRICE_AMOUNT,
+            COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
+            startSaleDate,
+            endSaleDate,
+            TAGS,
+            sessions
         );
 
         require(success, "Multi session event creation failed");
@@ -181,7 +179,7 @@ contract LetsCommitAttendSessionTest is Test {
 
     function test_RevertWhen_EventDoesNotExist() public {
         uint256 nonExistentEventId = 999;
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.EventDoesNotExist.selector, nonExistentEventId));
         vm.prank(participant);
         letsCommit.attendSession(nonExistentEventId, 0, SESSION_CODE_1);
@@ -190,7 +188,7 @@ contract LetsCommitAttendSessionTest is Test {
     function test_RevertWhen_SessionIndexInvalid() public {
         _enrollParticipant(testEventId, participant);
         uint8 invalidSessionIndex = 5; // Single session event only has index 0
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.InvalidSessionIndex.selector));
         vm.prank(participant);
         letsCommit.attendSession(testEventId, invalidSessionIndex, SESSION_CODE_1);
@@ -204,9 +202,9 @@ contract LetsCommitAttendSessionTest is Test {
 
     function test_RevertWhen_SessionCodeNotSet() public {
         _enrollParticipant(testEventId, participant);
-        
+
         vm.warp(session1StartTime + 1 hours); // Within session time but no code set
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.SessionCodeNotSet.selector));
         vm.prank(participant);
         letsCommit.attendSession(testEventId, 0, SESSION_CODE_1);
@@ -215,7 +213,7 @@ contract LetsCommitAttendSessionTest is Test {
     function test_RevertWhen_SessionCodeInvalid() public {
         _enrollParticipant(testEventId, participant);
         _setSessionCodeAndMoveToSession(testEventId, 0, SESSION_CODE_1);
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.InvalidSessionCode.selector));
         vm.prank(participant);
         letsCommit.attendSession(testEventId, 0, WRONG_CODE);
@@ -224,9 +222,9 @@ contract LetsCommitAttendSessionTest is Test {
     function test_RevertWhen_NotWithinSessionTime_BeforeStart() public {
         _enrollParticipant(testEventId, participant);
         _setSessionCodeAndMoveToSession(testEventId, 0, SESSION_CODE_1);
-        
+
         vm.warp(session1StartTime - 1 hours); // Before session starts
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.NotWithinSessionTime.selector));
         vm.prank(participant);
         letsCommit.attendSession(testEventId, 0, SESSION_CODE_1);
@@ -235,9 +233,9 @@ contract LetsCommitAttendSessionTest is Test {
     function test_RevertWhen_NotWithinSessionTime_AfterEnd() public {
         _enrollParticipant(testEventId, participant);
         _setSessionCodeAndMoveToSession(testEventId, 0, SESSION_CODE_1);
-        
+
         vm.warp(session1EndTime + 1 hours); // After session ends
-        
+
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.NotWithinSessionTime.selector));
         vm.prank(participant);
         letsCommit.attendSession(testEventId, 0, SESSION_CODE_1);
@@ -246,12 +244,12 @@ contract LetsCommitAttendSessionTest is Test {
     function test_RevertWhen_AlreadyAttended() public {
         _enrollParticipant(testEventId, participant);
         _setSessionCodeAndMoveToSession(testEventId, 0, SESSION_CODE_1);
-        
+
         // First attendance - should succeed
         vm.prank(participant);
         bool success = letsCommit.attendSession(testEventId, 0, SESSION_CODE_1);
         assertTrue(success);
-        
+
         // Second attendance - should fail
         vm.expectRevert(abi.encodeWithSelector(LetsCommit.ParticipantAlreadyAttended.selector));
         vm.prank(participant);
@@ -265,10 +263,10 @@ contract LetsCommitAttendSessionTest is Test {
     function test_AttendSession_Success_SingleSession() public {
         _enrollParticipant(testEventId, participant);
         _setSessionCodeAndMoveToSession(testEventId, 0, SESSION_CODE_1);
-        
+
         uint256 participantBalanceBefore = mIDRXToken.balanceOf(participant);
         uint256 contractBalanceBefore = mIDRXToken.balanceOf(address(letsCommit));
-        
+
         // Attend session
         vm.expectEmit(true, true, true, false);
         emit IEventIndexer.AttendEventSession({
@@ -277,28 +275,28 @@ contract LetsCommitAttendSessionTest is Test {
             participant: participant,
             attendToken: "" // We'll check this separately
         });
-        
+
         vm.prank(participant);
         bool success = letsCommit.attendSession(testEventId, 0, SESSION_CODE_1);
         assertTrue(success);
-        
+
         // Check attendance timestamp is recorded
         uint256 attendanceTime = letsCommit.getParticipantAttendance(testEventId, participant, 0);
         assertEq(attendanceTime, block.timestamp);
-        
+
         // Check attended sessions count increased
         uint8 attendedCount = letsCommit.getParticipantAttendedSessionsCount(testEventId, participant);
         assertEq(attendedCount, 1);
-        
+
         // Check participant received their full commitment fee (single session)
         uint256 expectedReward = COMMITMENT_WITH_DECIMALS; // Full amount for 1 session
         uint256 participantBalanceAfter = mIDRXToken.balanceOf(participant);
         assertEq(participantBalanceAfter, participantBalanceBefore + expectedReward);
-        
+
         // Check contract balance decreased
         uint256 contractBalanceAfter = mIDRXToken.balanceOf(address(letsCommit));
         assertEq(contractBalanceAfter, contractBalanceBefore - expectedReward);
-        
+
         // Check participant's commitment fee is now zero
         uint256 commitmentFeeAfter = letsCommit.getParticipantCommitmentFee(testEventId, participant);
         assertEq(commitmentFeeAfter, 0);
@@ -307,24 +305,24 @@ contract LetsCommitAttendSessionTest is Test {
     function test_AttendSession_Success_MultiSession_Partial() public {
         _enrollParticipant(multiSessionEventId, participant);
         _setSessionCodeAndMoveToSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         uint256 participantBalanceBefore = mIDRXToken.balanceOf(participant);
         uint256 commitmentFeeBefore = letsCommit.getParticipantCommitmentFee(multiSessionEventId, participant);
-        
+
         // Attend first session
         vm.prank(participant);
         bool success = letsCommit.attendSession(multiSessionEventId, 0, SESSION_CODE_1);
         assertTrue(success);
-        
+
         // Check attended sessions count
         uint8 attendedCount = letsCommit.getParticipantAttendedSessionsCount(multiSessionEventId, participant);
         assertEq(attendedCount, 1);
-        
+
         // Check participant received 1/3 of their commitment fee
         uint256 expectedReward = COMMITMENT_WITH_DECIMALS / 3; // 1/3 for 3-session event
         uint256 participantBalanceAfter = mIDRXToken.balanceOf(participant);
         assertEq(participantBalanceAfter, participantBalanceBefore + expectedReward);
-        
+
         // Check remaining commitment fee
         uint256 commitmentFeeAfter = letsCommit.getParticipantCommitmentFee(multiSessionEventId, participant);
         assertEq(commitmentFeeAfter, commitmentFeeBefore - expectedReward);
@@ -332,33 +330,33 @@ contract LetsCommitAttendSessionTest is Test {
 
     function test_AttendSession_Success_MultiSession_AllSessions() public {
         _enrollParticipant(multiSessionEventId, participant);
-        
+
         uint256 participantBalanceBefore = mIDRXToken.balanceOf(participant);
         uint256 originalCommitmentFee = letsCommit.getParticipantCommitmentFee(multiSessionEventId, participant);
-        
+
         // Attend session 1
         _setSessionCodeAndMoveToSession(multiSessionEventId, 0, SESSION_CODE_1);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         // Attend session 2
         _setSessionCodeAndMoveToSession(multiSessionEventId, 1, SESSION_CODE_2);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 1, SESSION_CODE_2);
-        
+
         // Attend session 3 (final session - should include any dust)
         _setSessionCodeAndMoveToSession(multiSessionEventId, 2, SESSION_CODE_3);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 2, SESSION_CODE_3);
-        
+
         // Check all sessions attended
         uint8 attendedCount = letsCommit.getParticipantAttendedSessionsCount(multiSessionEventId, participant);
         assertEq(attendedCount, 3);
-        
+
         // Check participant received their full commitment fee (including any dust)
         uint256 participantBalanceAfter = mIDRXToken.balanceOf(participant);
         assertEq(participantBalanceAfter, participantBalanceBefore + originalCommitmentFee);
-        
+
         // Check participant's commitment fee is now zero (no dust remains)
         uint256 commitmentFeeAfter = letsCommit.getParticipantCommitmentFee(multiSessionEventId, participant);
         assertEq(commitmentFeeAfter, 0);
@@ -368,23 +366,23 @@ contract LetsCommitAttendSessionTest is Test {
         // Enroll both participants
         _enrollParticipant(multiSessionEventId, participant);
         _enrollParticipant(multiSessionEventId, participant2);
-        
+
         _setSessionCodeAndMoveToSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         uint256 participant1BalanceBefore = mIDRXToken.balanceOf(participant);
         uint256 participant2BalanceBefore = mIDRXToken.balanceOf(participant2);
-        
+
         // Both attend the same session
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         vm.prank(participant2);
         letsCommit.attendSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         // Check both have attended 1 session
         assertEq(letsCommit.getParticipantAttendedSessionsCount(multiSessionEventId, participant), 1);
         assertEq(letsCommit.getParticipantAttendedSessionsCount(multiSessionEventId, participant2), 1);
-        
+
         // Check both received the same reward (1/3 of their commitment fee)
         uint256 expectedReward = COMMITMENT_WITH_DECIMALS / 3;
         assertEq(mIDRXToken.balanceOf(participant), participant1BalanceBefore + expectedReward);
@@ -394,12 +392,12 @@ contract LetsCommitAttendSessionTest is Test {
     function test_AttendSession_Success_VerifyAttendanceTimestamp() public {
         _enrollParticipant(testEventId, participant);
         _setSessionCodeAndMoveToSession(testEventId, 0, SESSION_CODE_1);
-        
+
         uint256 expectedTimestamp = block.timestamp;
-        
+
         vm.prank(participant);
         letsCommit.attendSession(testEventId, 0, SESSION_CODE_1);
-        
+
         uint256 actualTimestamp = letsCommit.getParticipantAttendance(testEventId, participant, 0);
         assertEq(actualTimestamp, expectedTimestamp);
     }
@@ -412,34 +410,34 @@ contract LetsCommitAttendSessionTest is Test {
         // Create an event where commitment amount doesn't divide evenly by session count
         // Use COMMITMENT_AMOUNT = 500, with 3 sessions = 166.66... per session
         _enrollParticipant(multiSessionEventId, participant);
-        
+
         uint256 originalCommitmentFee = COMMITMENT_WITH_DECIMALS; // 50000 (500 * 100)
         uint256 expectedPerSession = originalCommitmentFee / 3; // 16666 (with remainder 2)
-        
+
         uint256 balanceBefore = mIDRXToken.balanceOf(participant);
-        
+
         // Attend first two sessions
         _setSessionCodeAndMoveToSession(multiSessionEventId, 0, SESSION_CODE_1);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         _setSessionCodeAndMoveToSession(multiSessionEventId, 1, SESSION_CODE_2);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 1, SESSION_CODE_2);
-        
+
         // Check balance after first two sessions
         uint256 balanceAfterTwo = mIDRXToken.balanceOf(participant);
         assertEq(balanceAfterTwo, balanceBefore + (expectedPerSession * 2));
-        
+
         // Attend final session (should include dust)
         _setSessionCodeAndMoveToSession(multiSessionEventId, 2, SESSION_CODE_3);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 2, SESSION_CODE_3);
-        
+
         // Check final balance includes all original commitment fee + dust
         uint256 balanceAfterAll = mIDRXToken.balanceOf(participant);
         assertEq(balanceAfterAll, balanceBefore + originalCommitmentFee);
-        
+
         // Verify no dust remains in participant's commitment fee
         uint256 remainingCommitmentFee = letsCommit.getParticipantCommitmentFee(multiSessionEventId, participant);
         assertEq(remainingCommitmentFee, 0);
@@ -447,32 +445,32 @@ contract LetsCommitAttendSessionTest is Test {
 
     function test_AttendSession_Success_AttendanceFlags() public {
         _enrollParticipant(multiSessionEventId, participant);
-        
+
         // Initially no sessions attended
         assertFalse(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 0));
         assertFalse(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 1));
         assertFalse(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 2));
-        
+
         // Attend session 0
         _setSessionCodeAndMoveToSession(multiSessionEventId, 0, SESSION_CODE_1);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 0, SESSION_CODE_1);
-        
+
         // Check attendance flags
         assertTrue(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 0));
         assertFalse(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 1));
         assertFalse(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 2));
-        
+
         // Attend session 2 (skip session 1)
         _setSessionCodeAndMoveToSession(multiSessionEventId, 2, SESSION_CODE_3);
         vm.prank(participant);
         letsCommit.attendSession(multiSessionEventId, 2, SESSION_CODE_3);
-        
+
         // Check attendance flags
         assertTrue(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 0));
         assertFalse(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 1));
         assertTrue(letsCommit.hasParticipantAttendedSession(multiSessionEventId, participant, 2));
-        
+
         // Check attended count
         assertEq(letsCommit.getParticipantAttendedSessionsCount(multiSessionEventId, participant), 2);
     }

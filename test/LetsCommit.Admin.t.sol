@@ -26,9 +26,11 @@ contract LetsCommitAdminTest is Test {
     // Test data
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
+    string constant LOCATION = "Online Event";
     string constant IMAGE_URI = "https://example.com/image.jpg";
     uint256 constant PRICE_AMOUNT = 1000;
     uint256 constant COMMITMENT_AMOUNT = 500;
+    uint8 constant MAX_PARTICIPANT = 50;
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     // ============================================================================
@@ -124,7 +126,7 @@ contract LetsCommitAdminTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions2
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions2
         );
         assertTrue(success);
 
@@ -136,9 +138,11 @@ contract LetsCommitAdminTest is Test {
         letsCommit.createEvent(
             "Event 2",
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             PRICE_AMOUNT,
             COMMITMENT_AMOUNT,
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,

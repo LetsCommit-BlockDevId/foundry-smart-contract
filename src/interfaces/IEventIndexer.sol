@@ -5,21 +5,28 @@ interface IEventIndexer {
     // ============= EO
 
     /**
-     * @dev Log ketika event dibuat.
+     * @dev Log ketika event dibuat - event core data.
      */
     event CreateEvent(
         uint256 indexed eventId,
-        string title,
-        string description,
-        string location,
-        string imageUri,
+        address indexed organizer,
         uint256 priceAmount,
         uint256 commitmentAmount,
         uint8 totalSession,
         uint8 maxParticipant,
         uint256 startSaleDate,
-        uint256 endSaleDate,
-        address organizer,
+        uint256 endSaleDate
+    );
+
+    /**
+     * @dev Log ketika event dibuat - event metadata.
+     */
+    event CreateEventMetadata(
+        uint256 indexed eventId,
+        string title,
+        string description,
+        string location,
+        string imageUri,
         string[5] tag
     );
 

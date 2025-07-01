@@ -29,8 +29,10 @@ contract LetsCommitClaimFirstPortionTest is Test {
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
     string constant IMAGE_URI = "https://example.com/image.jpg";
+    string constant LOCATION = "Online Event";
     uint256 constant PRICE_AMOUNT = 1000; // 1000 tokens (without decimals)
     uint256 constant COMMITMENT_AMOUNT = 500; // 500 tokens (without decimals)
+    uint8 constant MAX_PARTICIPANT = 50; // Maximum participants allowed
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     uint256 constant TOKEN_DECIMALS = 2;
@@ -86,7 +88,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         require(success, "Event creation failed");
@@ -303,7 +305,7 @@ contract LetsCommitClaimFirstPortionTest is Test {
 
         vm.prank(organizer2);
         bool createSuccess = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
         assertTrue(createSuccess, "Event creation should succeed");
 
@@ -371,9 +373,11 @@ contract LetsCommitClaimFirstPortionTest is Test {
         bool createSuccess = letsCommit.createEvent(
             TITLE,
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             1, // 1 token price
             1, // 1 token commitment
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,

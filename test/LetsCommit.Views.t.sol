@@ -26,9 +26,11 @@ contract LetsCommitViewsTest is Test {
     // Test data
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
+    string constant LOCATION = "Online Event";
     string constant IMAGE_URI = "https://example.com/image.jpg";
     uint256 constant PRICE_AMOUNT = 1000;
     uint256 constant COMMITMENT_AMOUNT = 500;
+    uint8 constant MAX_PARTICIPANT = 50;
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     // ============================================================================
@@ -66,7 +68,7 @@ contract LetsCommitViewsTest is Test {
 
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         return 1; // First event ID
@@ -256,9 +258,11 @@ contract LetsCommitViewsTest is Test {
         letsCommit.createEvent(
             "Event 2",
             DESCRIPTION,
+            LOCATION,
             IMAGE_URI,
             PRICE_AMOUNT * 2,
             COMMITMENT_AMOUNT * 2,
+            MAX_PARTICIPANT,
             startSaleDate,
             endSaleDate,
             TAGS,

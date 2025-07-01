@@ -226,9 +226,11 @@ contract LetsCommit is IEventIndexer {
     function createEvent(
         string calldata title,
         string calldata description,
+        string calldata location,
         string calldata imageUri,
         uint256 priceAmount,
         uint256 commitmentAmount,
+        uint8 maxParticipant,
         uint256 startSaleDate,
         uint256 endSaleDate,
         string[5] calldata tags,
@@ -252,7 +254,17 @@ contract LetsCommit is IEventIndexer {
 
         // EFFECTS & INTERACTIONS: Create the event
         return _createEvent(
-            title, description, imageUri, priceAmount, commitmentAmount, startSaleDate, endSaleDate, tags, _sessions
+            title,
+            description,
+            location,
+            imageUri,
+            priceAmount,
+            commitmentAmount,
+            maxParticipant,
+            startSaleDate,
+            endSaleDate,
+            tags,
+            _sessions
         );
     }
 
@@ -526,9 +538,11 @@ contract LetsCommit is IEventIndexer {
     function _createEvent(
         string calldata title,
         string calldata description,
+        string calldata location,
         string calldata imageUri,
         uint256 priceAmount,
         uint256 commitmentAmount,
+        uint8 maxParticipant,
         uint256 startSaleDate,
         uint256 endSaleDate,
         string[5] calldata tags,
@@ -561,15 +575,21 @@ contract LetsCommit is IEventIndexer {
         // INTERACTIONS: Emit events
         emit CreateEvent({
             eventId: newEventId,
-            title: title,
-            description: description,
-            imageUri: imageUri,
+            organizer: msg.sender,
             priceAmount: priceAmount,
             commitmentAmount: commitmentAmount,
             totalSession: totalSession,
+            maxParticipant: maxParticipant,
             startSaleDate: startSaleDate,
-            endSaleDate: endSaleDate,
-            organizer: msg.sender,
+            endSaleDate: endSaleDate
+        });
+
+        emit CreateEventMetadata({
+            eventId: newEventId,
+            title: title,
+            description: description,
+            location: location,
+            imageUri: imageUri,
             tag: tags
         });
 
@@ -707,6 +727,7 @@ contract LetsCommit is IEventIndexer {
             organizer: msg.sender,
             releasedAmount: releasedAmount
         });
+        emit GenerateSessionToken(_eventId, _sessionIndex, _code);
 
         return true;
     }
@@ -737,10 +758,7 @@ contract LetsCommit is IEventIndexer {
      * @param _sessionIndex The index of the session
      * @return success True if attendance was recorded successfully
      */
-    function _attendSession(uint256 _eventId, uint8 _sessionIndex)
-        internal
-        returns (bool success)
-    {
+    function _attendSession(uint256 _eventId, uint8 _sessionIndex) internal returns (bool success) {
         // Get event data to know total sessions
         Event memory eventData = events[_eventId];
 
@@ -748,7 +766,7 @@ contract LetsCommit is IEventIndexer {
 
         // Record attendance timestamp
         participants[_eventId][msg.sender].attendance[_sessionIndex] = block.timestamp;
-        
+
         // Increment attended sessions counter
         participants[_eventId][msg.sender].attendedSessionsCount++;
 
@@ -761,7 +779,7 @@ contract LetsCommit is IEventIndexer {
         // Handle any dust/remainder from division
         // If this is the last possible session for this participant, give them any remaining dust
         uint8 totalSessionsAttended = participants[_eventId][msg.sender].attendedSessionsCount;
-        
+
         // If this is the last session and there's remaining dust, include it
         if (totalSessionsAttended == eventData.totalSession) {
             uint256 remainingDust = originalCommitmentFee - (attendanceReward * (totalSessionsAttended - 1));

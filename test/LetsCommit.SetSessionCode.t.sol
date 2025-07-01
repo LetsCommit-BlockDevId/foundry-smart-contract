@@ -27,8 +27,10 @@ contract LetsCommitSetSessionCodeTest is Test {
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
     string constant IMAGE_URI = "https://example.com/image.jpg";
+    string constant LOCATION = "Online Event";
     uint256 constant PRICE_AMOUNT = 1000; // 1000 tokens (without decimals)
     uint256 constant COMMITMENT_AMOUNT = 500; // 500 tokens (without decimals)
+    uint8 constant MAX_PARTICIPANT = 50; // Maximum participants allowed
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     uint256 constant TOKEN_DECIMALS = 2;
@@ -89,7 +91,7 @@ contract LetsCommitSetSessionCodeTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         require(success, "Event creation failed");
@@ -131,7 +133,7 @@ contract LetsCommitSetSessionCodeTest is Test {
 
         vm.prank(organizer);
         bool success = letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         require(success, "Event creation failed");

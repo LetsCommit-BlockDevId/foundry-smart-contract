@@ -26,9 +26,11 @@ contract LetsCommitEnrollEventTest is Test {
     // Test data
     string constant TITLE = "Test Event";
     string constant DESCRIPTION = "Test Description";
+    string constant LOCATION = "Online Event";
     string constant IMAGE_URI = "https://example.com/image.jpg";
     uint256 constant PRICE_AMOUNT = 1000;
     uint256 constant COMMITMENT_AMOUNT = 500;
+    uint8 constant MAX_PARTICIPANT = 50; // Maximum participants allowed
     string[5] TAGS = ["tag1", "tag2", "", "", ""];
 
     // ============================================================================
@@ -66,7 +68,7 @@ contract LetsCommitEnrollEventTest is Test {
 
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, PRICE_AMOUNT, COMMITMENT_AMOUNT, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         return 1; // First event ID
@@ -82,7 +84,7 @@ contract LetsCommitEnrollEventTest is Test {
 
         vm.prank(organizer);
         letsCommit.createEvent(
-            TITLE, DESCRIPTION, IMAGE_URI, priceAmount, commitmentAmount, startSaleDate, endSaleDate, TAGS, sessions
+            TITLE, DESCRIPTION, LOCATION, IMAGE_URI, priceAmount, commitmentAmount, MAX_PARTICIPANT, startSaleDate, endSaleDate, TAGS, sessions
         );
 
         return letsCommit.eventId(); // Return the current event ID
