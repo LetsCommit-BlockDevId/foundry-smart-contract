@@ -48,6 +48,9 @@ contract LetsCommit is IEventIndexer {
     /// @dev Storage for organizer claimable amounts: organizer => eventId => claimable amount
     mapping(address => mapping(uint256 => uint256)) public organizerClaimableAmount;
 
+    /// @dev Storage for tracking organizer claimed amounts: organizer => eventId => claimed amount
+    mapping(address => mapping(uint256 => uint256)) public organizerClaimedAmount;
+
     /// @dev Storage for organizer vested amounts: organizer => eventId => vested amount
     mapping(address => mapping(uint256 => uint256)) public organizerVestedAmount;
 
@@ -128,6 +131,15 @@ contract LetsCommit is IEventIndexer {
 
     /// @dev Error thrown when user has insufficient token balance
     error InsufficientBalance(uint256 required, uint256 available);
+
+    /// @dev Error thrown when caller is not the organizer of the event
+    error NotEventOrganizer();
+
+    /// @dev Error thrown when organizer has no claimable amount for the event
+    error NoClaimableAmount();
+
+    /// @dev Error thrown when organizer has already claimed the first portion for this event
+    error EventFeeAlreadyClaimed();
 
     // ============================================================================
     // MODIFIERS
@@ -289,19 +301,13 @@ contract LetsCommit is IEventIndexer {
     }
 
     /**
-     * @dev Allows organizer to claim first portion of earnings
+     * @dev Allows organizer to claim first portion of earnings (50% of event fee).
+     * Basically now organizer can claim anytime even during the sale period.
+     * @param _eventId The ID of the event to claim earnings from
      * @return success True if claim was successful
-     * TODO: Add proper parameters and implementation
      */
-    function claimFirstPortion() external returns (bool success) {
-        // TODO: Implement proper claim logic
-        emit OrganizerFirstClaim({
-            eventId: ++eventIdClaim,
-            organizer: address(0x0), // TODO: Use msg.sender
-            claimAmount: 10_000 / 2
-        });
-
-        return true;
+    function claimFirstPortion(uint256 _eventId) external eventExists(_eventId) returns (bool success) {
+        return _claimOrganizerClaimableEventFee(_eventId);
     }
 
     /**
@@ -520,7 +526,52 @@ contract LetsCommit is IEventIndexer {
         return true;
     }
 
-    // TODO: Add internal helper functions if needed
+    /**
+     * @dev Internal function to handle organizer claiming their claimable event fee (50% of event fee)
+     * @param _eventId The ID of the event to claim earnings from
+     * @return success True if claim was successful
+     */
+    function _claimOrganizerClaimableEventFee(uint256 _eventId) internal returns (bool success) {
+        Event memory eventData = events[_eventId];
+        
+        // CHECKS: Validate all claim conditions
+        
+        // Check 1: Event exists (already validated by eventExists modifier)
+        
+        // Check 2: msg.sender is organizer of that event id
+        if (msg.sender != eventData.organizer) {
+            revert NotEventOrganizer();
+        }
+        
+        // Check 3: That event id's organizer's claimable vault is more than 0
+        uint256 claimableAmount = organizerClaimableAmount[msg.sender][_eventId];
+        if (claimableAmount == 0) {
+            revert NoClaimableAmount();
+        }
+        
+        // EFFECTS: Update contract state
+        
+        // Reset claimable amount to 0 (all tokens will be sent)
+        organizerClaimableAmount[msg.sender][_eventId] = 0;
+
+        // Track the claimed amount for this organizer and event because we want to enable multiple claims between the sale period
+        organizerClaimedAmount[msg.sender][_eventId] += claimableAmount;
+        
+        // INTERACTIONS: Transfer tokens to organizer
+        bool transferSuccess = mIDRXToken.transfer(msg.sender, claimableAmount);
+        if (!transferSuccess) {
+            revert TokenTransferFailed();
+        }
+        
+        // Emit claim event
+        emit OrganizerFirstClaim({
+            eventId: _eventId,
+            organizer: msg.sender,
+            claimAmount: claimableAmount
+        });
+
+        return true;
+    }
 
     // ============================================================================
     // VIEW FUNCTIONS
@@ -594,6 +645,16 @@ contract LetsCommit is IEventIndexer {
      */
     function getParticipantAttendance(uint256 _eventId, address _participant, uint8 _sessionIndex) external view eventExists(_eventId) returns (uint256 attendanceTimestamp) {
         return participants[_eventId][_participant].attendance[_sessionIndex];
+    }
+
+    /**
+     * @dev Checks if organizer has already claimed the first portion for an event
+     * @param _eventId The ID of the event
+     * @param _organizer The address of the organizer
+     * @return claimed more than 0 if organizer has already claimed the first portion
+     */
+    function getOrganizerClaimedAmount(uint256 _eventId, address _organizer) external view eventExists(_eventId) returns (uint256 claimed) {
+        return organizerClaimedAmount[_organizer][_eventId];
     }
 
     // ============================================================================
