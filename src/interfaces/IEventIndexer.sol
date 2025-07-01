@@ -11,10 +11,12 @@ interface IEventIndexer {
         uint256 indexed eventId,
         string title,
         string description,
+        string location,
         string imageUri,
         uint256 priceAmount,
         uint256 commitmentAmount,
         uint8 totalSession,
+        uint8 maxParticipant,
         uint256 startSaleDate,
         uint256 endSaleDate,
         address organizer,
@@ -32,6 +34,11 @@ interface IEventIndexer {
      * @dev Log ketika organizer menset kode untuk session
      */
     event SetSessionCode(uint256 indexed eventId, uint8 indexed session, address organizer, uint256 releasedAmount);
+
+    /**
+     * @dev Log ketika session token dibuat.
+     */
+    event GenerateSessionToken(uint256 indexed eventId, uint8 indexed session, string token);
 
     /**
      * @dev Log ketika EO mengklaim 50% keuntungan setelah event berakhir masa penjualan.
