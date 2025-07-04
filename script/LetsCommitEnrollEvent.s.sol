@@ -24,7 +24,7 @@ contract LetsCommitEnrollEventScript is Script {
 
     function enrollInEvent(LetsCommit letsCommit) internal {
         // Hardcoded event ID to enroll in
-        uint256 eventId = 8; // Change this to the event you want to enroll in
+        uint256 eventId = 11; // Change this to the event you want to enroll in
 
         console.log("=== Enrolling in Event ===");
         console.log("Event ID:", eventId);
