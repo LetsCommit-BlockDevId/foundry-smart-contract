@@ -34,8 +34,8 @@ import {LetsCommit} from "../src/LetsCommit.sol";
 
 contract LetsCommitAttendSessionScript is Script {
     // Configuration - you can change these values as needed
-    address constant USER_ADDRESS = 0xad382a836ACEc5Dd0D149c099D04aA7B49b64cA6;  // Replace with participant's address
-    
+    address constant USER_ADDRESS = 0xad382a836ACEc5Dd0D149c099D04aA7B49b64cA6; // Replace with participant's address
+
     function setUp() public {}
 
     function run() public {
@@ -47,9 +47,9 @@ contract LetsCommitAttendSessionScript is Script {
         LetsCommit letsCommit = LetsCommit(letsCommitAddress);
 
         // Configuration - you can change these values as needed
-        uint256 eventId = 11;        // Event ID to attend session for
-        uint8 sessionIndex = 0;     // Session index (0-based)
-        string memory sessionCode = "ABCD";  // 4-character session code (must match organizer's code)
+        uint256 eventId = 11; // Event ID to attend session for
+        uint8 sessionIndex = 0; // Session index (0-based)
+        string memory sessionCode = "ABCD"; // 4-character session code (must match organizer's code)
 
         // Call attendSession function
         attendSession(letsCommit, eventId, sessionIndex, sessionCode);
@@ -57,12 +57,9 @@ contract LetsCommitAttendSessionScript is Script {
         vm.stopBroadcast();
     }
 
-    function attendSession(
-        LetsCommit letsCommit, 
-        uint256 eventId, 
-        uint8 sessionIndex, 
-        string memory sessionCode
-    ) internal {
+    function attendSession(LetsCommit letsCommit, uint256 eventId, uint8 sessionIndex, string memory sessionCode)
+        internal
+    {
         console.log("=== Attending Session ===");
         console.log("Event ID:", eventId);
         console.log("Session Index:", sessionIndex);
@@ -101,7 +98,7 @@ contract LetsCommitAttendSessionScript is Script {
         try letsCommit.attendSession(eventId, sessionIndex, sessionCode) returns (bool success) {
             if (success) {
                 console.log("Session attended successfully!");
-                
+
                 // Verify attendance was recorded
                 bool attendanceVerified = letsCommit.hasParticipantAttendedSession(eventId, USER_ADDRESS, sessionIndex);
                 console.log("Attendance verification:", attendanceVerified ? "CONFIRMED" : "FAILED");

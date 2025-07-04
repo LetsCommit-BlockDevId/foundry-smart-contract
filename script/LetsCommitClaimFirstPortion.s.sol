@@ -33,7 +33,7 @@ contract LetsCommitClaimFirstPortionScript is Script {
         try letsCommit.claimFirstPortion(eventId) returns (bool success) {
             if (success) {
                 console.log("First portion claimed successfully!");
-                
+
                 // Get the claimable amount after claiming
                 uint256 claimableAmount = letsCommit.getOrganizerClaimableAmount(eventId, tx.origin);
                 console.log("Remaining claimable amount:", claimableAmount);

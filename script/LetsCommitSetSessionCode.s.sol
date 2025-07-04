@@ -16,9 +16,9 @@ contract LetsCommitSetSessionCodeScript is Script {
         LetsCommit letsCommit = LetsCommit(letsCommitAddress);
 
         // Configuration - you can change these values as needed
-        uint256 eventId = 11;        // Event ID to set session code for
-        uint8 sessionIndex = 0;     // Session index (0-based)
-        string memory sessionCode = "ABCD";  // 4-character session code
+        uint256 eventId = 11; // Event ID to set session code for
+        uint8 sessionIndex = 0; // Session index (0-based)
+        string memory sessionCode = "ABCD"; // 4-character session code
 
         // Call setSessionCode function
         setSessionCode(letsCommit, eventId, sessionIndex, sessionCode);
@@ -26,12 +26,9 @@ contract LetsCommitSetSessionCodeScript is Script {
         vm.stopBroadcast();
     }
 
-    function setSessionCode(
-        LetsCommit letsCommit, 
-        uint256 eventId, 
-        uint8 sessionIndex, 
-        string memory sessionCode
-    ) internal {
+    function setSessionCode(LetsCommit letsCommit, uint256 eventId, uint8 sessionIndex, string memory sessionCode)
+        internal
+    {
         console.log("=== Setting Session Code ===");
         console.log("Event ID:", eventId);
         console.log("Session Index:", sessionIndex);
@@ -42,7 +39,7 @@ contract LetsCommitSetSessionCodeScript is Script {
         try letsCommit.setSessionCode(eventId, sessionIndex, sessionCode) returns (bool success) {
             if (success) {
                 console.log("Session code set successfully!");
-                
+
                 // Verify the code was set
                 bool hasCode = letsCommit.hasSessionCode(eventId, sessionIndex);
                 console.log("Session code verification:", hasCode ? "CONFIRMED" : "FAILED");
