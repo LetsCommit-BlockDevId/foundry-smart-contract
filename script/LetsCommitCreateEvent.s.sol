@@ -33,9 +33,9 @@ contract LetsCommitCreateEventScript is Script {
         uint256 commitmentAmount = 5000; // 5_000 tokens
         uint8 maxParticipant = 10;
         
-        // Time settings - 10 minutes from now for sale start, 20 minutes from now for sale end
-        uint256 startSaleDate = block.timestamp + 10 minutes;
-        uint256 endSaleDate = block.timestamp + 20 minutes;
+        // Time settings - 1 minutes from now sale start, 5 minutes from now for sale end
+        uint256 startSaleDate = block.timestamp + 1 minutes;
+        uint256 endSaleDate = block.timestamp + 5 minutes;
         
         // Tags
         string[5] memory tags = ["", "", "", "", ""];
@@ -43,17 +43,17 @@ contract LetsCommitCreateEventScript is Script {
         // Create 2 simple sessions
         LetsCommit.Session[] memory sessions = new LetsCommit.Session[](2);
         
-        // Session 1: starts 30 minutes from now, lasts 30 minutes
+        // Session 1: starts 5 minutes from now, lasts 5 minutes
         sessions[0] = LetsCommit.Session({
-            startSessionTime: block.timestamp + 30 minutes,
-            endSessionTime: block.timestamp + 60 minutes,
+            startSessionTime: block.timestamp + 5 minutes,
+            endSessionTime: block.timestamp + 10 minutes,
             attendedCount: 0
         });
         
-        // Session 2: starts 1 hour from now, lasts 1 hour
+        // Session 2: starts 10 minutes from now, lasts 5 minutes
         sessions[1] = LetsCommit.Session({
-            startSessionTime: block.timestamp + 1 hours,
-            endSessionTime: block.timestamp + 2 hours,
+            startSessionTime: block.timestamp + 5 minutes,
+            endSessionTime: block.timestamp + 10 minutes,
             attendedCount: 0
         });
 
